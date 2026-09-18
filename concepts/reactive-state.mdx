@@ -1,10 +1,10 @@
 ---
 title: "Reactive State: Thread-Safe Key-Value Store and Signals"
 sidebarTitle: "Reactive State"
-description: "Qyro Engine's reactive state system lets you store values, subscribe to changes, and fire named signals — all from any thread."
+description: "Qyro Engine's reactive state system lets you store values, subscribe to changes, and fire named signals — safely from any thread, with no extra setup."
 ---
 
-Qyro Engine ships a built-in reactive state system that works like a lightweight, framework-agnostic store. You store values under string keys, subscribe callbacks that fire whenever a value changes, and emit named signals for events that don't fit neatly into the key-value model. The store is backed by `ReactiveStoreAdapter`, a thread-safe in-memory implementation that dispatches notifications outside of its internal lock — so you can safely call `set_state` from background worker threads without risking GUI deadlocks.
+Qyro Engine ships a built-in reactive state system that works like a lightweight, framework-agnostic store. You store values under string keys, subscribe callbacks that fire whenever a value changes, and emit named signals for events that don't fit neatly into the key-value model. The store is thread-safe and dispatches notifications outside of its internal lock — so you can safely call `set_state` from background worker threads without risking GUI deadlocks.
 
 All state and signal methods are available directly on any `ApplicationContext` subclass.
 
@@ -78,7 +78,7 @@ sig_sub = self.on_signal("export_complete", on_export_done)
 
 ## Practical Example: Counter App
 
-The following example wires a simple counter using `set_state`, `get_state`, and `subscribe`:
+The following example wires a simple counter using `set_state`, `get_state`, and `subscribe`. Because `ApplicationContext` owns the reactive store, `CounterWidget` receives the context as a constructor argument so it can read and write shared state:
 
 ```python
 import sys
@@ -87,10 +87,14 @@ from PySide6.QtCore import Qt
 from qyro_engine import ApplicationContext, Component
 
 class CounterWidget(QWidget, Component):
+    def __init__(self, context: ApplicationContext, parent=None):
+        self._ctx = context        # Store the ApplicationContext reference
+        super().__init__(parent)   # Triggers the Component lifecycle pipeline
+
     def component_will_mount(self):
         # Initialise the counter state once — safe to call before render()
-        if self.get_state("count") is None:
-            self.set_state("count", 0)
+        if self._ctx.get_state("count") is None:
+            self._ctx.set_state("count", 0)
 
     def render(self):
         layout = QVBoxLayout(self)
@@ -111,7 +115,7 @@ class CounterWidget(QWidget, Component):
 
     def component_did_mount(self):
         # Subscribe — callback fires immediately with the current value
-        self._count_sub = self.subscribe("count", self._refresh_display)
+        self._count_sub = self._ctx.subscribe("count", self._refresh_display)
 
         self._btn_inc.clicked.connect(self._increment)
         self._btn_dec.clicked.connect(self._decrement)
@@ -121,16 +125,16 @@ class CounterWidget(QWidget, Component):
         self._display.setText(str(value))
 
     def _increment(self):
-        current = self.get_state("count", 0)
-        self.set_state("count", current + 1)
+        current = self._ctx.get_state("count", 0)
+        self._ctx.set_state("count", current + 1)
 
     def _decrement(self):
-        current = self.get_state("count", 0)
-        self.set_state("count", current - 1)
+        current = self._ctx.get_state("count", 0)
+        self._ctx.set_state("count", current - 1)
 
     def _reset(self):
-        self.set_state("count", 0)
-        self.emit_signal("counter_reset", data={"previous": self.get_state("count")})
+        self._ctx.set_state("count", 0)
+        self._ctx.emit_signal("counter_reset", data={"previous": self._ctx.get_state("count")})
 
     def destroy_component(self):
         self._count_sub.unsubscribe()
@@ -141,7 +145,7 @@ class MainWindow(QMainWindow, ApplicationContext):
     def __init__(self):
         super().__init__()
         self.setMinimumSize(400, 300)
-        counter = CounterWidget(parent=self)
+        counter = CounterWidget(context=self, parent=self)
         self.setCentralWidget(counter)
 
         # Listen for the reset signal at the app level
@@ -155,10 +159,11 @@ if __name__ == "__main__":
 
 ## StateSubscription Reference
 
-`subscribe()` and `on_signal()` both return a `StateSubscription` object:
+`subscribe()` and `on_signal()` both return a `StateSubscription` object. You do not need to import it — it is returned automatically by those calls:
 
 ```python
-from qyro_engine.domain.state import StateSubscription
+sub = self.subscribe("theme", on_theme_changed)
+# sub is a StateSubscription; call sub.unsubscribe() to stop receiving updates
 ```
 
 <Accordion title="StateSubscription fields and methods">
@@ -174,7 +179,7 @@ from qyro_engine.domain.state import StateSubscription
 
 ## Thread Safety
 
-The `ReactiveStoreAdapter` protects its internal dictionary and subscriber lists with a reentrant lock (`threading.RLock`). Callbacks are dispatched **after** the lock is released, so you can safely call `set_state` from a `QThread`, a `threading.Thread`, or a Kivy clock schedule without risking a deadlock.
+Qyro Engine's reactive store protects its internal dictionary and subscriber lists with a reentrant lock (`threading.RLock`). Callbacks are dispatched **after** the lock is released, so you can safely call `set_state` from a `QThread`, a `threading.Thread`, or a Kivy clock schedule without risking a deadlock.
 
 <Note>
 Callback functions run on whichever thread called `set_state`. If you update a Qt widget inside a subscriber callback and the callback fires from a background thread, use Qt's signal–slot mechanism or `QMetaObject.invokeMethod` to marshal the update back to the main thread.

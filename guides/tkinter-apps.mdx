@@ -1,7 +1,7 @@
 ---
-title: "Building Tkinter Desktop Apps with Qyro Engine"
+title: "Build Tkinter Desktop Applications with Qyro Engine"
 sidebarTitle: "Tkinter Apps"
-description: "Build lightweight Tkinter desktop apps with Qyro Engine — no extra dependencies, works on any Python installation out of the box."
+description: "Build lightweight Tkinter desktop apps with Qyro Engine — no extra dependencies required, works on any Python 3.11+ installation out of the box."
 ---
 
 Tkinter ships as part of the Python standard library, which makes it the ideal choice when you want a zero-dependency UI target or need to support environments where installing Qt or Kivy isn't practical. Qyro Engine treats Tkinter as a first-class binding — you get the same settings loading, resource resolution, reactive state, and execution-mode detection that Qt and Kivy users enjoy, with no extras required.
@@ -10,7 +10,7 @@ Tkinter ships as part of the Python standard library, which makes it the ideal c
 
 The base package includes Tkinter support. No optional extras are needed:
 
-```python
+```bash
 pip install qyro-engine
 ```
 
@@ -41,7 +41,7 @@ from qyro_engine import ApplicationContext
 class MyTkApp(tk.Tk, ApplicationContext):
     def __init__(self):
         super().__init__()
-        self.title(self.build_settings.get("app_name", "Tkinter Desktop"))
+        self.title(self.app_settings.get("app_name", "Tkinter Desktop"))
         self.geometry("400x250")
 
         lbl = tk.Label(self, text=f"Execution mode: {self.execution_mode.value}")
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     List `tk.Tk` first in the MRO so Tkinter initialises the root window correctly. `ApplicationContext` cooperatively attaches its engine state before your `__init__` body runs.
   </Step>
   <Step title="Use Qyro APIs inside __init__">
-    `self.build_settings`, `self.get_resource()`, `self.execution_mode`, and `self.is_frozen` are available as soon as `super().__init__()` returns.
+    `self.app_settings`, `self.get_resource()`, `self.execution_mode`, and `self.is_frozen` are available as soon as `super().__init__()` returns.
   </Step>
   <Step title="Start the event loop">
     Call `app.exec()` or `app.mainloop()` — both are equivalent. `exec()` is the Qyro-standard name that works identically across all bindings.
@@ -89,7 +89,7 @@ class MyTkApp(tk.Tk, ApplicationContext):
         super().__init__()
 
         # Read merged settings from settings/base.json
-        app_name = self.build_settings.get("app_name", "My App")
+        app_name = self.app_settings.get("app_name", "My App")
         self.title(app_name)
 
         # Resolve a bundled image — returns absolute path, works frozen or in source
@@ -106,7 +106,7 @@ class MyTkApp(tk.Tk, ApplicationContext):
 ```
 
 <CardGroup cols={2}>
-  <Card title="build_settings" icon="gear">
+  <Card title="app_settings" icon="gear">
     Dictionary of all merged settings from `settings/base.json` and any OS-specific JSON overrides.
   </Card>
   <Card title="execution_mode" icon="box">

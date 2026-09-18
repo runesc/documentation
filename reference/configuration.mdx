@@ -1,7 +1,7 @@
 ---
-title: "Configuring Your Qyro Engine Application"
+title: "Qyro Engine Application Configuration with base.json"
 sidebarTitle: "Configuration"
-description: "Learn how to set up base.json and platform override files to configure your app's name, icon, framework, and version."
+description: "Learn how to configure your Qyro Engine app using base.json and platform override files to set the name, icon, framework binding, and version."
 ---
 
 Qyro Engine reads its configuration from plain JSON files that sit inside a `settings/` directory in your project. The engine merges a `base.json` file with an optional platform-specific override at startup, then exposes the result through `ApplicationContext.app_settings`, `ApplicationContext.metadata`, and `Component.app_settings`. No environment variables or code changes are needed to switch between platforms.
@@ -30,11 +30,8 @@ The table below lists every recognised key. Unknown keys are preserved in `raw_s
 
 ## Complete `base.json` Example
 
-```python
-# settings/base.json
-```
-
 ```json
+// settings/base.json
 {
   "app_name": "Invoicer Pro",
   "version": "2.1.0",

@@ -247,7 +247,7 @@ class MyApp(QMainWindow, ApplicationContext):
         self.set_state("status", "Ready")
 
         # ✅ store=self connects the widget to this context's reactive store
-        self.status_label = ReactiveLabel(state_key="status", store=self)
+        self.status_label = ReactiveLabel(text="", state_key="status", store=self)
 
         # Later, this update will propagate to the label automatically
         self.set_state("status", "Processing…")
@@ -383,7 +383,7 @@ Kivy does not always expose host OS information in a way that Qyro Engine's `Pla
 
 ```python
 import sys
-from qyro_engine.domain.entities import PlatformType
+from qyro_engine import PlatformType
 
 class MyMobileApp(App, ApplicationContext):
     def build(self):

@@ -1,7 +1,7 @@
 ---
-title: "Platform Detection in Qyro Engine"
+title: "Qyro Engine Platform Detection and Execution Modes"
 sidebarTitle: "Platform Detection"
-description: "Detect the host OS and execution environment at runtime using PlatformType, ExecutionMode, and PlatformDetector."
+description: "Use PlatformType, ExecutionMode, and PlatformDetector to detect the OS and execution environment at runtime for platform-conditional logic in your app."
 ---
 
 Qyro Engine automatically detects the operating system and execution environment when it starts up. You can query the results through properties on `ApplicationContext`, through the `PlatformDetector` utility class, or by inspecting the `PlatformType` and `ExecutionMode` enums directly. This lets you load the right assets, apply the correct UI conventions, and gate platform-specific features without writing `sys.platform` checks yourself.

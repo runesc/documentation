@@ -1,5 +1,5 @@
 ---
-title: "Qyro Engine Changelog: Releases & Version History"
+title: "Qyro Engine Changelog: Versions, Changes & Updates"
 sidebarTitle: "Changelog"
 description: "Full release history for Qyro Engine — every public version, what changed, what was added, and what you need to know before upgrading."
 ---
@@ -12,7 +12,7 @@ This changelog tracks every public release of Qyro Engine. Each entry lists new 
 
 **Released:** 2024 · `pip install qyro-engine==0.1.0`
 
-This is the first public release of Qyro Engine — a clean-architecture runtime and lifecycle framework for building native Python desktop and mobile applications across Qt, Kivy, and Tkinter without coupling your application code to any single GUI toolkit.
+This is the first public release of Qyro Engine — a runtime and lifecycle framework for building native Python desktop and mobile applications across Qt, Kivy, and Tkinter without coupling your application code to any single GUI toolkit.
 
 ### What's New
 
@@ -83,7 +83,7 @@ self.emit_signal("username", "Charles Babbage")
 </Accordion>
 
 <Accordion title="Reactive Qt widgets">
-Six two-way data-bound Qt widgets ship in `qyro_engine.reactive.widgets`. Each widget reads its initial value from the state store and writes back to the store whenever the user interacts with it — no manual signal wiring required.
+Five two-way data-bound Qt widgets ship in `qyro_engine.reactive.widgets`. Each widget reads its initial value from the state store and writes back to the store whenever the user interacts with it — no manual signal wiring required.
 
 | Widget | Bound value type |
 |---|---|
@@ -99,7 +99,7 @@ from qyro_engine.reactive.widgets import ReactiveLineEdit, ReactiveLabel
 self.set_state("query", "")
 
 search_input = ReactiveLineEdit(state_key="query", store=self)
-results_label = ReactiveLabel(state_key="query", store=self)
+results_label = ReactiveLabel(text="", state_key="query", store=self)
 # Typing in search_input automatically updates results_label
 ```
 </Accordion>
@@ -178,7 +178,7 @@ self.set_window_icon(self.get_resource("icons", "busy.ico"))
 Access the current platform inside `ApplicationContext` via `self.platform`:
 
 ```python
-from qyro_engine.domain.entities import PlatformType
+from qyro_engine import PlatformType
 
 if self.platform == PlatformType.WINDOWS:
     self.apply_windows_theme()
@@ -205,7 +205,7 @@ Add your DSN to settings:
 ```
 
 <Note>
-Without the `sentry` extra installed, the `sentry_hook` adapter falls back silently to the built-in `console_hook`, which prints formatted crash diagnostics to stderr. Your app will not crash because Sentry is absent.
+Without the `sentry` extra installed, Qyro Engine falls back silently to printing formatted crash diagnostics to stderr. Your app will not crash because Sentry is absent.
 </Note>
 </Accordion>
 

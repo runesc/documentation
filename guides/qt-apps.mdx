@@ -1,7 +1,7 @@
 ---
-title: "Building Qt Desktop Apps with Qyro Engine"
+title: "Build Native Qt Desktop Applications with Qyro Engine"
 sidebarTitle: "Qt Apps"
-description: "Build native Qt desktop applications using PySide6, PyQt6, PySide2, or PyQt5 with Qyro Engine's ApplicationContext mixin."
+description: "Build native Qt desktop applications using PySide6, PyQt6, PySide2, or PyQt5 with Qyro Engine's ApplicationContext mixin and Component lifecycle."
 ---
 
 Qyro Engine supports all four major Qt Python bindings — PySide6, PyQt6, PySide2, and PyQt5. You declare which binding you want in a single `settings/base.json` file, and the engine automatically loads the correct adapter at runtime. Your application code stays identical regardless of which binding you choose.
@@ -93,10 +93,10 @@ if __name__ == "__main__":
 
 ## Component Lifecycle for Qt Widgets
 
-For sub-widgets and panels, mix `Component` into any `QWidget` subclass. Qyro automatically calls your lifecycle methods in the correct order after the C++ widget object is fully constructed.
+For sub-widgets and panels, mix `Component` into any `QWidget` subclass. Qyro automatically calls your lifecycle methods in the correct order after the widget object is fully constructed.
 
 ```python
-from qyro_engine.client.component import Component
+from qyro_engine import Component
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 
 

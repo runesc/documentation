@@ -1,7 +1,7 @@
 ---
 title: "Component Lifecycle: React-Inspired Widget Architecture"
 sidebarTitle: "Lifecycle"
-description: "The Component mixin gives Qt widgets a predictable mount, render, style, and resize lifecycle inspired by React class components."
+description: "The Component mixin gives your Qt widgets a predictable mount, render, style, and responsive-resize lifecycle, inspired by React class components."
 ---
 
 `Component` is a mixin base class that wraps your Qt widgets in a predictable, React-inspired lifecycle. Instead of scattering initialization code across `__init__`, `showEvent`, and manual `resizeEvent` overrides, you implement focused hook methods — `component_will_mount`, `render`, `component_did_mount`, `set_css`, and `responsive_ui` — and Qyro Engine calls them in the correct order every time. The result is components that are easy to read, easy to test, and easy to compose.
@@ -218,5 +218,5 @@ class LegacyWidget(QWidget, PPGLifeCycle):
 ```
 
 <Warning>
-Do **not** combine `Component` and `ApplicationContext` on the same class. `Component` manages widget-level lifecycle (mount, render, style, resize) while `ApplicationContext` manages application-level lifecycle (engine boot, settings, window management). They serve distinct roles and operate at different layers of the architecture.
+Do **not** combine `Component` and `ApplicationContext` on the same class. `Component` manages widget-level lifecycle (mount, render, style, resize) while `ApplicationContext` manages application-level lifecycle (engine boot, settings, window management). They serve distinct, separate roles.
 </Warning>

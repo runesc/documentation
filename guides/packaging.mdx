@@ -1,14 +1,14 @@
 ---
-title: "Packaging Qyro Apps as Standalone Executables"
+title: "Packaging Qyro Engine Apps as Standalone Executables"
 sidebarTitle: "Packaging"
-description: "Package your Qyro Engine app as a self-contained executable with PyInstaller — including settings, resources, and frozen-mode detection."
+description: "Package your Qyro Engine app as a self-contained executable with PyInstaller — including settings, resources, and frozen-mode detection at runtime."
 ---
 
 Qyro Engine detects PyInstaller bundles automatically. When your app runs as a packaged executable, the engine switches to `ExecutionMode.FROZEN_PYINSTALLER` and re-roots all resource lookups to `sys._MEIPASS` — the directory PyInstaller extracts your bundle into at runtime. Your `get_resource()` calls, settings loading, and platform detection all work identically in source and frozen modes without any code changes.
 
 ## Install PyInstaller
 
-```python
+```bash
 pip install pyinstaller
 ```
 
@@ -16,7 +16,7 @@ pip install pyinstaller
 
 Run PyInstaller from your project root, pointing it at your entry-point script:
 
-```python
+```bash
 pyinstaller --onefile --windowed main.py
 ```
 
@@ -48,7 +48,7 @@ The first element of each tuple is the source path (relative to your project roo
 
 ## How Qyro Resolves Resources When Frozen
 
-When PyInstaller runs your app, it extracts bundle contents to a temporary directory exposed as `sys._MEIPASS`. Qyro's resource adapter detects this automatically and uses `sys._MEIPASS` as the root for all `get_resource()` lookups. You do not need to change any resource call — the same path segments you use in development resolve correctly in the packaged binary.
+When PyInstaller runs your app, it extracts bundle contents to a temporary directory exposed as `sys._MEIPASS`. Qyro's resource resolver detects this automatically and uses `sys._MEIPASS` as the root for all `get_resource()` lookups. You do not need to change any resource call — the same path segments you use in development resolve correctly in the packaged binary.
 
 ```python
 # Works identically in development and in the packaged .exe
@@ -85,7 +85,7 @@ class MyApp(QMainWindow, ApplicationContext):
 ### Conditional Behaviour Example
 
 ```python
-from qyro_engine import is_frozen, ExecutionMode
+from qyro_engine import is_frozen, get_resource
 
 if is_frozen():
     # Running as packaged app — resolve an optional log path from the bundle
@@ -103,12 +103,12 @@ else:
 
 <Steps>
   <Step title="Install PyInstaller">
-    ```python
+    ```bash
     pip install pyinstaller
     ```
   </Step>
   <Step title="Generate an initial .spec file">
-    ```python
+    ```bash
     pyinstaller --onefile --windowed --name MyApp main.py
     ```
     PyInstaller creates `MyApp.spec` in your project root.
@@ -117,7 +117,7 @@ else:
     Open `MyApp.spec` and add your `settings/` and `resources/` directories to the `datas` list inside the `Analysis()` call.
   </Step>
   <Step title="Rebuild from the .spec file">
-    ```python
+    ```bash
     pyinstaller MyApp.spec
     ```
     The final executable lands in `dist/MyApp` (or `dist/MyApp.exe` on Windows).

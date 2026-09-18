@@ -1,7 +1,7 @@
 ---
-title: "Building Kivy Mobile & Desktop Apps with Qyro"
+title: "Build Kivy Mobile and Desktop Apps with Qyro Engine"
 sidebarTitle: "Kivy Apps"
-description: "Build touch-friendly Kivy apps for Android, iOS, and desktop with Qyro Engine's ApplicationContext mixin and resource resolver."
+description: "Build touch-friendly Kivy apps for Android, iOS, and desktop with Qyro Engine's ApplicationContext mixin, resource resolver, and platform detection."
 ---
 
 Kivy support in Qyro Engine brings mobile-friendly touch UIs and cross-platform deployment to Android, iOS, and desktop into the same ergonomic mixin pattern you use for Qt. Mix `ApplicationContext` into your `kivy.app.App` subclass and gain instant access to settings, resource resolution, platform detection, and reactive state — without changing how you write Kivy code.
@@ -10,7 +10,7 @@ Kivy support in Qyro Engine brings mobile-friendly touch UIs and cross-platform 
 
 Kivy is an optional dependency. Install it by requesting the `kivy` extra:
 
-```python
+```bash
 pip install "qyro-engine[kivy]"
 ```
 
@@ -31,7 +31,7 @@ Create `settings/base.json` at the root of your project and set `"binding"` to `
 
 ## Build a Kivy App
 
-Mix `ApplicationContext` into your `App` subclass exactly as you would with Qt. The mixin is binding-agnostic — the same `build_settings`, `get_resource`, `platform`, and `is_frozen` APIs are available regardless of which UI toolkit you're using.
+Mix `ApplicationContext` into your `App` subclass exactly as you would with Qt. The mixin is binding-agnostic — the same `app_settings`, `get_resource`, `platform`, and `is_frozen` APIs are available regardless of which UI toolkit you're using.
 
 ```python
 from kivy.app import App
@@ -42,7 +42,7 @@ from qyro_engine import ApplicationContext
 class MyMobileApp(App, ApplicationContext):
     def build(self):
         # Read settings loaded from settings/base.json
-        app_name = self.build_settings.get("app_name", "Kivy Mobile App")
+        app_name = self.app_settings.get("app_name", "Kivy Mobile App")
         self.title = app_name
 
         # Safely resolve a bundled resource (returns absolute path)
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     List `App` first in the MRO so Kivy's `build()` machinery works correctly. `ApplicationContext` is a cooperative mixin that doesn't interfere.
   </Step>
   <Step title="Access Qyro APIs inside build()">
-    `self.build_settings`, `self.get_resource()`, `self.platform`, and `self.is_frozen` are all available as soon as `__init__` completes.
+    `self.app_settings`, `self.get_resource()`, `self.platform`, and `self.is_frozen` are all available as soon as `__init__` completes.
   </Step>
   <Step title="Call app.run()">
     Start the Kivy event loop with the standard `app.run()` call — no Qyro-specific runner needed.
@@ -79,8 +79,8 @@ All `ApplicationContext` service APIs work identically inside a Kivy app.
 class MyMobileApp(App, ApplicationContext):
     def build(self):
         # Read any key from settings/base.json (merged with os-specific overrides)
-        version = self.build_settings.get("version", "1.0")
-        theme   = self.build_settings.get("theme", "dark")
+        version = self.app_settings.get("version", "1.0")
+        theme   = self.app_settings.get("theme", "dark")
 
         # Resolve a bundled asset — works in source and in frozen APK/IPA builds
         splash_path = self.get_resource("images", "splash.png")
@@ -96,7 +96,7 @@ class MyMobileApp(App, ApplicationContext):
 ```
 
 <CardGroup cols={2}>
-  <Card title="build_settings" icon="gear">
+  <Card title="app_settings" icon="gear">
     Dictionary of all merged settings from `settings/base.json` and any OS-specific overrides (e.g. `settings/android.json`).
   </Card>
   <Card title="get_resource(*segments)" icon="folder-open">

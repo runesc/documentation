@@ -1,7 +1,7 @@
 ---
-title: "Qyro Engine Python API Reference"
+title: "Qyro Engine Python API Reference — Classes & Functions"
 sidebarTitle: "API Reference"
-description: "Complete reference for every public class, function, property, and decorator exported by Qyro Engine's Python package."
+description: "Complete reference for every public class, function, property, and decorator exported by the qyro_engine Python package, with real signatures and examples."
 ---
 
 Qyro Engine exposes its entire public surface through a single top-level import. You can use module-level convenience functions for quick scripts, or work through `ApplicationContext` and `Component` for full lifecycle and state management in production apps.
@@ -11,6 +11,8 @@ from qyro_engine import (
     ApplicationContext,
     Component,
     init_lifecycle,
+    PPGLifeCycle,
+    EngineContainer,
     PlatformDetector,
     PlatformType,
     ExecutionMode,
@@ -18,6 +20,11 @@ from qyro_engine import (
     get_resource,
     load_build_settings,
     is_frozen,
+    app_is_frozen,
+    QyroEngineError,
+    ResourceNotFoundError,
+    SettingsNotFoundError,
+    FrameworkNotAvailableError,
 )
 ```
 
@@ -25,7 +32,7 @@ from qyro_engine import (
 
 ## Module-Level Functions
 
-These three helpers let you resolve resources, load settings, and detect the execution environment without constructing an `ApplicationContext`. Internally they share a single default `EngineContainer` instance that is created on first use.
+These three helpers let you resolve resources, load settings, and detect the execution environment without constructing an `ApplicationContext`. They are useful in quick scripts and utilities where a full application context is not needed.
 
 ### `get_resource`
 
@@ -167,7 +174,7 @@ class MainWindow(ApplicationContext, QMainWindow):
 </ResponseField>
 
 <ResponseField name="container" type="EngineContainer">
-  Direct reference to the underlying `EngineContainer` dependency injection container.
+  Direct reference to the underlying `EngineContainer` that manages framework adapters, resource resolution, and state.
 </ResponseField>
 
 <ResponseField name="app" type="Any">
@@ -522,6 +529,34 @@ class Sidebar(QWidget):
 
 ---
 
+### `PPGLifeCycle`
+
+`PPGLifeCycle` is a backward-compatible alias for `Component`. It is exported from the top-level `qyro_engine` package for projects that used an earlier naming convention. New code should use `Component` directly.
+
+```python
+from qyro_engine import PPGLifeCycle  # same as Component
+```
+
+---
+
+## `EngineContainer`
+
+`EngineContainer` is the dependency container that `ApplicationContext` uses internally to wire together framework adapters, settings loaders, resource resolvers, and the reactive state store. You can access the shared container through `ApplicationContext.container` when you need low-level access, but most applications never need to interact with it directly.
+
+```python
+from qyro_engine import EngineContainer
+
+# Standalone usage — creates a default container without a GUI framework
+container = EngineContainer()
+settings = container.load_settings_use_case.execute().raw_settings
+```
+
+<Note>
+  In most applications you will not need to instantiate `EngineContainer` yourself. Use `ApplicationContext` instead, which manages the container lifecycle for you.
+</Note>
+
+---
+
 ## Reactive Widgets
 
 Reactive widgets eliminate signal/slot boilerplate by binding Qt input widgets directly to Qyro state keys. Any state change automatically updates the widget, and any user interaction automatically writes back to the store.
@@ -538,8 +573,8 @@ The base mixin that all concrete reactive widgets extend. You can apply it to yo
 
 Connects the widget to a reactive state key.
 
-<ParamField path="store_or_context" type="ApplicationContext | StateAdapter" required>
-  An `ApplicationContext` instance or a raw state adapter.
+<ParamField path="store_or_context" type="ApplicationContext" required>
+  An `ApplicationContext` instance to bind against.
 </ParamField>
 
 <ParamField path="state_key" type="str" required>
@@ -563,7 +598,7 @@ A `QLineEdit` with bidirectional text binding.
 <ParamField path="state_key" type="str">
   State key holding the text value.
 </ParamField>
-<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+<ParamField path="store" type="ApplicationContext | None">
   State provider. Binding is skipped when `None`.
 </ParamField>
 <ParamField path="parent" type="QWidget | None">
@@ -588,7 +623,7 @@ A `QCheckBox` with bidirectional boolean binding. The store value is coerced to 
 <ParamField path="state_key" type="str">
   State key holding the boolean value.
 </ParamField>
-<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+<ParamField path="store" type="ApplicationContext | None">
   State provider.
 </ParamField>
 <ParamField path="parent" type="QWidget | None">
@@ -613,7 +648,7 @@ A `QLabel` that refreshes its text automatically when the bound state key change
 <ParamField path="state_key" type="str">
   State key whose value is displayed.
 </ParamField>
-<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+<ParamField path="store" type="ApplicationContext | None">
   State provider.
 </ParamField>
 <ParamField path="parent" type="QWidget | None">
@@ -638,7 +673,7 @@ A `QSlider` with bidirectional numeric binding. The store value is cast to `int`
 <ParamField path="state_key" type="str">
   State key holding the integer value.
 </ParamField>
-<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+<ParamField path="store" type="ApplicationContext | None">
   State provider.
 </ParamField>
 <ParamField path="parent" type="QWidget | None">
@@ -660,7 +695,7 @@ A `QSpinBox` with bidirectional integer binding.
 <ParamField path="state_key" type="str">
   State key holding the integer value.
 </ParamField>
-<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+<ParamField path="store" type="ApplicationContext | None">
   State provider.
 </ParamField>
 <ParamField path="parent" type="QWidget | None">
@@ -763,3 +798,27 @@ Looks up an arbitrary key in `raw_settings`, returning `default` when the key is
 theme = self.metadata.get("theme", "light")
 debug = self.metadata.get("debug_mode", False)
 ```
+
+---
+
+## Exception Classes
+
+Qyro Engine exports four exception classes from the top-level package. All four inherit from `QyroEngineError`.
+
+| Class | Raised when |
+|-------|-------------|
+| `QyroEngineError` | Base class for all engine errors. Catch this for a single handler. |
+| `ResourceNotFoundError` | A required asset path cannot be resolved. |
+| `SettingsNotFoundError` | `base.json` cannot be found during engine initialisation. |
+| `FrameworkNotAvailableError` | The requested UI framework is not installed. |
+
+```python
+from qyro_engine import (
+    QyroEngineError,
+    ResourceNotFoundError,
+    SettingsNotFoundError,
+    FrameworkNotAvailableError,
+)
+```
+
+For full field descriptions, constructor signatures, recovery patterns, and the complete exception hierarchy (including `StateKeyNotFoundError` and `PlatformUnsupportedError`), see the [Error Types reference](/reference/errors).

@@ -1,7 +1,7 @@
 ---
 title: "Application Context: The Qyro Engine Runtime Façade"
 sidebarTitle: "App Context"
-description: "ApplicationContext is the primary mixin that wires the Qyro Engine runtime into your window class, giving you settings, resources, reactive state, and platform info."
+description: "ApplicationContext is the mixin that wires Qyro Engine into your window class, giving you settings, resources, reactive state, and platform detection."
 ---
 
 `ApplicationContext` is the heart of every Qyro Engine application. It is a mixin class that you combine with your GUI base class — `QMainWindow`, `kivy.app.App`, or `tk.Tk` — and it automatically boots the engine runtime, reads your `settings/base.json`, discovers and applies the window title and icon, and exposes a unified API for platform detection, resource resolution, reactive state, and signals. You get all of this without writing any boilerplate bootstrap code.
@@ -61,7 +61,7 @@ You can override either value at any time using the `window_title` property or `
 | `execution_mode` | `ExecutionMode` | Detailed mode: `source`, `pyinstaller`, `frozen_generic`, or `embedded`. |
 
 ```python
-from qyro_engine.domain.entities import PlatformType
+from qyro_engine import PlatformType
 
 if self.platform == PlatformType.WINDOWS:
     print("Running on Windows")

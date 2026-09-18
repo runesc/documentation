@@ -1,5 +1,5 @@
 ---
-title: "Introduction to Qyro Engine — Python UI Framework"
+title: "Introduction to Qyro Engine — Python UI Frameworks"
 sidebarTitle: "Introduction"
 description: "Discover what Qyro Engine is, how its React-inspired architecture works, and which platforms and UI frameworks it supports out of the box."
 ---
@@ -51,9 +51,9 @@ Qyro Engine ships a thread-safe in-memory state store. Call `set_state(key, valu
 
 Place `settings/base.json` and a `resources/` folder at your project root. Qyro Engine finds them whether you run from source or inside a PyInstaller frozen bundle (`sys._MEIPASS`). Use `get_resource("icons", "512.png")` and the engine resolves the right platform-specific path for you.
 
-### Pluggable UI framework adapters
+### Pluggable UI framework support
 
-Every UI framework is isolated behind a port interface. Swap `"binding": "PySide6"` to `"binding": "kivy"` in `base.json` and your application code stays unchanged. The adapters cover:
+Swap `"binding": "PySide6"` to `"binding": "kivy"` in `base.json` and your application code stays unchanged. Qyro Engine handles the switch automatically — no imports to update, no startup code to rewrite. The supported frameworks are:
 
 | Extra | Framework | Qt generation |
 |---|---|---|

@@ -1,7 +1,7 @@
 ---
-title: "Qyro Engine Error Types and Exception Handling"
+title: "Qyro Engine Exception Classes and Error Handling Guide"
 sidebarTitle: "Error Types"
-description: "Reference for every exception raised by Qyro Engine, with field descriptions and guidance on how to catch and recover from each."
+description: "Reference for every exception raised by Qyro Engine: hierarchy, field descriptions, and practical guidance on how to catch and recover from each error."
 ---
 
 Qyro Engine uses a structured exception hierarchy rooted at `QyroEngineError`. Every exception the engine raises is a subclass of this base, which means you can catch all engine errors with a single `except QyroEngineError` clause, or target specific failure modes with narrower handlers. All exception classes are importable directly from the top-level `qyro_engine` package.

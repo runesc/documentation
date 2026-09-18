@@ -1,7 +1,7 @@
 ---
-title: "Reactive Qt Widgets for Automatic State Sync"
+title: "Reactive Qt Widgets for Automatic State Synchronisation"
 sidebarTitle: "Reactive Widgets"
-description: "Use ReactiveLineEdit, ReactiveLabel, ReactiveCheckBox, ReactiveSlider, and ReactiveSpinBox to auto-sync Qt widgets with your state store."
+description: "Use ReactiveLineEdit, ReactiveLabel, ReactiveCheckBox, ReactiveSlider, and ReactiveSpinBox to auto-sync Qt widgets with your Qyro state store."
 ---
 
 Qyro Engine's reactive widget library eliminates manual signal/slot wiring between your UI and your application state. Each reactive widget holds a reference to a state key in the engine's store and automatically keeps itself in sync — reading from the store when state changes externally, and writing back to the store when the user interacts with the widget. You describe *what* state a widget represents, not *how* to synchronise it.
@@ -88,7 +88,7 @@ class ReactiveApp(QMainWindow, ApplicationContext):
         input_field = ReactiveLineEdit(state_key="username", store=self)
 
         # Reactive label — re-renders automatically when "username" changes
-        display_label = ReactiveLabel(state_key="username", store=self)
+        display_label = ReactiveLabel(text="", state_key="username", store=self)
 
         # Listen to state changes programmatically
         self.subscribe("username", lambda new_val: print(f"Username changed to: {new_val}"))
