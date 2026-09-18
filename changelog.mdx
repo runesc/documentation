@@ -1,0 +1,227 @@
+---
+title: "Qyro Engine Changelog: Releases & Version History"
+sidebarTitle: "Changelog"
+description: "Full release history for Qyro Engine — every public version, what changed, what was added, and what you need to know before upgrading."
+---
+
+This changelog tracks every public release of Qyro Engine. Each entry lists new features, changes, and anything you should be aware of when adopting that version. Releases follow [Semantic Versioning](https://semver.org/): given a version number `MAJOR.MINOR.PATCH`, a breaking change increments `MAJOR`, a backward-compatible addition increments `MINOR`, and a bug fix increments `PATCH`.
+
+---
+
+## v0.1.0 — Initial Release
+
+**Released:** 2024 · `pip install qyro-engine==0.1.0`
+
+This is the first public release of Qyro Engine — a clean-architecture runtime and lifecycle framework for building native Python desktop and mobile applications across Qt, Kivy, and Tkinter without coupling your application code to any single GUI toolkit.
+
+### What's New
+
+<Accordion title="Unified ApplicationContext mixin">
+`ApplicationContext` is the central public surface of the engine. Mix it into any GUI base class — `QMainWindow`, `kivy.app.App`, `tk.Tk`, or anything else — and gain automatic window title configuration, icon discovery, platform detection, settings loading, resource resolution, and reactive state management with no additional boilerplate.
+
+```python
+from qyro_engine import ApplicationContext
+from PySide6.QtWidgets import QMainWindow
+
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+        # Window title and icon are applied automatically from settings/base.json
+        self.setMinimumSize(800, 600)
+```
+
+Supported bindings in this release: **PySide6**, **PyQt6**, **PySide2**, **PyQt5**, **Kivy**, and **Tkinter**.
+</Accordion>
+
+<Accordion title="React-inspired Component lifecycle">
+The `Component` base class and `init_lifecycle` helper introduce a declarative, React-style lifecycle for building reusable UI components inside Qyro apps. Implement any combination of the following hooks:
+
+| Hook | When it runs |
+|---|---|
+| `component_will_mount` | Before the component is attached to the widget tree |
+| `render` | Builds and returns the component's widget subtree |
+| `component_did_mount` | After the component is fully mounted and visible |
+| `set_css` | Apply stylesheet rules scoped to this component |
+| `responsive_ui` | Re-evaluated when the window is resized |
+
+```python
+from qyro_engine import Component, init_lifecycle
+
+class UserCard(Component):
+    def component_will_mount(self):
+        self.user_data = self.store.get_state("current_user")
+
+    def render(self):
+        # Return your widget subtree here
+        ...
+
+    def component_did_mount(self):
+        print("UserCard is now visible")
+```
+
+`PPGLifeCycle` is also exported as a compatibility alias for projects migrating from the legacy `ppg_runtime` package.
+</Accordion>
+
+<Accordion title="Thread-safe reactive state store">
+The built-in reactive store lets you manage application state outside your widget code and propagate changes to bound widgets automatically. All state mutations are thread-safe — you can call `set_state()` from any background thread without extra synchronisation.
+
+Key APIs available on `ApplicationContext`:
+
+```python
+# Register a state key with an initial value
+self.set_state("username", "Ada Lovelace")
+
+# Read the current value
+name = self.get_state("username")
+
+# Subscribe to changes (callback receives the new value)
+self.subscribe("username", lambda val: print(f"Changed: {val}"))
+
+# Emit a one-off signal to all subscribers of a key
+self.emit_signal("username", "Charles Babbage")
+```
+</Accordion>
+
+<Accordion title="Reactive Qt widgets">
+Six two-way data-bound Qt widgets ship in `qyro_engine.reactive.widgets`. Each widget reads its initial value from the state store and writes back to the store whenever the user interacts with it — no manual signal wiring required.
+
+| Widget | Bound value type |
+|---|---|
+| `ReactiveLineEdit` | `str` |
+| `ReactiveCheckBox` | `bool` |
+| `ReactiveLabel` | `str` (display only) |
+| `ReactiveSlider` | `int` |
+| `ReactiveSpinBox` | `int` |
+
+```python
+from qyro_engine.reactive.widgets import ReactiveLineEdit, ReactiveLabel
+
+self.set_state("query", "")
+
+search_input = ReactiveLineEdit(state_key="query", store=self)
+results_label = ReactiveLabel(state_key="query", store=self)
+# Typing in search_input automatically updates results_label
+```
+</Accordion>
+
+<Accordion title="Hierarchical JSON settings">
+Settings are loaded from `settings/base.json` at startup. If a platform-specific file exists alongside it (`windows.json`, `mac.json`, or `linux.json`), its keys are merged on top of the base configuration. This means you only need to override the values that differ per platform.
+
+```python
+# settings/base.json
+{
+    "binding": "PySide6",
+    "app_name": "My App",
+    "version": "1.0.0",
+    "theme": "light"
+}
+
+# settings/windows.json  (merged on top on Windows)
+{
+    "theme": "dark"
+}
+```
+
+Use `load_build_settings()` to inspect the merged result at runtime:
+
+```python
+from qyro_engine import load_build_settings
+
+settings = load_build_settings()
+print(settings["theme"])   # "dark" on Windows, "light" everywhere else
+```
+</Accordion>
+
+<Accordion title="Multi-tier resource resolver with PyInstaller support">
+`get_resource()` searches for assets in the following order, returning the first match:
+
+1. `resources/<current-os>/` — platform-specific assets
+2. `resources/base/` — cross-platform fallback assets
+3. `resources/` — direct placement
+4. `sys._MEIPASS/...` — inside a PyInstaller frozen bundle
+
+Pass `required=False` to return `None` instead of raising `ResourceNotFoundError` when an asset is optional.
+
+```python
+# Resolves automatically in source and frozen environments
+icon_path = self.get_resource("icons", "app.ico")
+
+# Optional asset — returns None if not found
+splash = self.get_resource("images", "splash.png", required=False)
+```
+</Accordion>
+
+<Accordion title="Automatic window title and icon configuration">
+When `ApplicationContext` initialises, it reads `app_name` from `settings/base.json` and applies it as the window title using the correct API for the active binding (`setWindowTitle()` for Qt, `title` for Kivy, `title()` for Tkinter). It also auto-discovers an icon from the standard resource paths and applies it to both the application and the window.
+
+You can update either property at any time after initialisation:
+
+```python
+# Change the title reactively
+self.window_title = "Processing…"
+
+# Apply a different icon at runtime
+self.set_window_icon(self.get_resource("icons", "busy.ico"))
+```
+</Accordion>
+
+<Accordion title="Platform detection">
+`PlatformDetector` identifies the host operating system and exposes it as a `PlatformType` enum value. The following platforms are detected in this release:
+
+- `PlatformType.WINDOWS`
+- `PlatformType.MACOS`
+- `PlatformType.LINUX` (with distro sub-detection: Ubuntu, Fedora, Arch)
+- `PlatformType.ANDROID`
+- `PlatformType.IOS`
+- `PlatformType.UNKNOWN` (fallback)
+
+Access the current platform inside `ApplicationContext` via `self.platform`:
+
+```python
+from qyro_engine.domain.entities import PlatformType
+
+if self.platform == PlatformType.WINDOWS:
+    self.apply_windows_theme()
+```
+</Accordion>
+
+<Accordion title="Optional Sentry crash reporting integration">
+If you install the `sentry` extra, Qyro Engine automatically registers an unhandled-exception hook that forwards crash reports to your Sentry project. No manual `sentry_sdk.init()` call is needed in application code — configure your DSN in `settings/base.json` and the engine handles the rest.
+
+Install the extra:
+
+```python
+pip install "qyro-engine[sentry]"
+```
+
+Add your DSN to settings:
+
+```python
+{
+    "binding": "PySide6",
+    "app_name": "My App",
+    "sentry_dsn": "https://your-dsn@sentry.io/project-id"
+}
+```
+
+<Note>
+Without the `sentry` extra installed, the `sentry_hook` adapter falls back silently to the built-in `console_hook`, which prints formatted crash diagnostics to stderr. Your app will not crash because Sentry is absent.
+</Note>
+</Accordion>
+
+<Accordion title="Python version support">
+Qyro Engine v0.1.0 supports **Python 3.11 – 3.15**. Individual bindings have narrower constraints based on upstream library compatibility:
+
+| Binding | Python versions |
+|---|---|
+| PySide6 | 3.11 – 3.14 |
+| PyQt6 | 3.11 – 3.14 |
+| PyQt5 | 3.11 – 3.13 |
+| PySide2 | < 3.11 (legacy) |
+| Kivy | 3.11 – 3.15 |
+| Tkinter | 3.11 – 3.15 (built-in) |
+
+<Tip>
+For the broadest Python version support with no external dependencies, use `"binding": "tkinter"`. For modern desktop applications, `"binding": "PySide6"` is recommended on Python 3.11–3.14.
+</Tip>
+</Accordion>

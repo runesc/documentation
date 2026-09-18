@@ -1,20 +1,71 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "Welcome to Qyro Engine — Python Desktop & Mobile Apps"
+sidebarTitle: "Home"
+description: "Qyro Engine is a Python runtime framework for building native desktop and mobile apps across Qt, Kivy, and Tkinter using a React-inspired component architecture."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+Qyro Engine is a clean-architecture runtime for Python developers who want to build production-ready native apps without boilerplate or CLI lock-in. Mix `ApplicationContext` into any window class to get automatic settings loading, platform detection, resource discovery, and a unified event loop — all in a single `pip install`.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Introduction" icon="book-open" href="/introduction">
+    Learn what Qyro Engine is, which UI frameworks it supports, and the key concepts behind its architecture.
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Qyro Engine with your preferred UI framework extra and set up your project structure.
+  </Card>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Build and run a minimal PySide6 app in four steps — from install to a running window.
+  </Card>
+  <Card title="Application Context" icon="circle-nodes" href="/concepts/application-context">
+    Deep-dive into the `ApplicationContext` mixin: settings, platform, state, resources, and icons.
+  </Card>
+  <Card title="Qt Apps Guide" icon="desktop" href="/guides/qt-apps">
+    Step-by-step guide to building full Qt applications with PySide6, PyQt6, PySide2, and PyQt5.
+  </Card>
+  <Card title="API Reference" icon="code" href="/reference/api">
+    Complete reference for every public class, method, and property exported by `qyro_engine`.
+  </Card>
+</CardGroup>
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## Get up and running in three steps
+
+<Steps>
+  <Step title="Install Qyro Engine">
+    Pick the extra that matches your target UI framework and install it with pip.
+
+    ```bash
+    pip install "qyro-engine[pyside6]"
+    ```
+  </Step>
+  <Step title="Create settings/base.json">
+    Qyro Engine reads your app name, binding, and metadata from a single JSON file at project root.
+
+    ```json
+    {
+      "app_name": "My First App",
+      "binding": "PySide6",
+      "version": "1.0.0",
+      "author": "Your Name"
+    }
+    ```
+  </Step>
+  <Step title="Write your app class and run">
+    Mix `ApplicationContext` into your window class and call `exec()` — the rest is automatic.
+
+    ```python
+    import sys
+    from qyro_engine import ApplicationContext
+    from PySide6.QtWidgets import QMainWindow
+
+    class MyApp(QMainWindow, ApplicationContext):
+        def __init__(self):
+            super().__init__()
+            self.setMinimumSize(640, 480)
+
+    if __name__ == "__main__":
+        window = MyApp()
+        window.show()
+        sys.exit(window.exec())
+    ```
+  </Step>
+</Steps>

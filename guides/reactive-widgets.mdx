@@ -1,0 +1,149 @@
+---
+title: "Reactive Qt Widgets for Automatic State Sync"
+sidebarTitle: "Reactive Widgets"
+description: "Use ReactiveLineEdit, ReactiveLabel, ReactiveCheckBox, ReactiveSlider, and ReactiveSpinBox to auto-sync Qt widgets with your state store."
+---
+
+Qyro Engine's reactive widget library eliminates manual signal/slot wiring between your UI and your application state. Each reactive widget holds a reference to a state key in the engine's store and automatically keeps itself in sync — reading from the store when state changes externally, and writing back to the store when the user interacts with the widget. You describe *what* state a widget represents, not *how* to synchronise it.
+
+<Note>
+  Reactive widgets are Qt-only. They depend on `QLineEdit`, `QCheckBox`, `QLabel`, `QSlider`, and `QSpinBox` from the active Qt binding (PySide6, PyQt6, PySide2, or PyQt5). They do not apply to Kivy or Tkinter.
+</Note>
+
+## Import
+
+```python
+from qyro_engine.reactive.widgets import (
+    ReactiveLineEdit,
+    ReactiveCheckBox,
+    ReactiveLabel,
+    ReactiveSlider,
+    ReactiveSpinBox,
+)
+```
+
+## Widget Reference
+
+<CardGroup cols={2}>
+  <Card title="ReactiveLineEdit" icon="i-cursor">
+    Bidirectional text input. Wraps `QLineEdit`. User edits update the store; store changes update the field.
+
+    ```python
+    ReactiveLineEdit(state_key, store, parent)
+    ```
+  </Card>
+  <Card title="ReactiveCheckBox" icon="square-check">
+    Bidirectional boolean toggle. Wraps `QCheckBox`. Check state maps to `True`/`False` in the store.
+
+    ```python
+    ReactiveCheckBox(text, state_key, store, parent)
+    ```
+  </Card>
+  <Card title="ReactiveLabel" icon="tag">
+    Read-only display label that re-renders when state changes. Wraps `QLabel`.
+
+    ```python
+    ReactiveLabel(text, state_key, store, parent)
+    ```
+  </Card>
+  <Card title="ReactiveSlider" icon="sliders">
+    Bidirectional integer slider. Wraps `QSlider`. Pass a Qt `orientation` constant or leave `None` for horizontal.
+
+    ```python
+    ReactiveSlider(orientation, state_key, store, parent)
+    ```
+  </Card>
+</CardGroup>
+
+<CardGroup cols={2}>
+  <Card title="ReactiveSpinBox" icon="arrow-up-1-9">
+    Bidirectional integer spin box. Wraps `QSpinBox`.
+
+    ```python
+    ReactiveSpinBox(state_key, store, parent)
+    ```
+  </Card>
+</CardGroup>
+
+## Complete Example
+
+The following example wires a `ReactiveLineEdit` and a `ReactiveLabel` to the same state key. Typing in the input field instantly updates the label — no signal/slot code required.
+
+```python
+import sys
+from qyro_engine import ApplicationContext
+from qyro_engine.reactive.widgets import ReactiveLineEdit, ReactiveLabel
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout
+
+
+class ReactiveApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+        self.setMinimumSize(400, 200)
+
+        # Set the initial value in the reactive state store
+        self.set_state("username", "Ada Lovelace")
+
+        # Two-way bound text input — editing this field updates the store
+        input_field = ReactiveLineEdit(state_key="username", store=self)
+
+        # Reactive label — re-renders automatically when "username" changes
+        display_label = ReactiveLabel(state_key="username", store=self)
+
+        # Listen to state changes programmatically
+        self.subscribe("username", lambda new_val: print(f"Username changed to: {new_val}"))
+
+        layout = QVBoxLayout()
+        layout.addWidget(input_field._widget)
+        layout.addWidget(display_label._widget)
+
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+
+
+if __name__ == "__main__":
+    window = ReactiveApp()
+    window.show()
+    sys.exit(window.exec())
+```
+
+<Tip>
+  The `store` parameter accepts an `ApplicationContext` instance directly. Qyro automatically resolves the underlying state adapter from the context, so you never need to pass a lower-level store object.
+</Tip>
+
+## Dynamic Binding with bind_state()
+
+All reactive widgets expose a `bind_state()` method that lets you attach or re-attach a widget to any store and state key after construction.
+
+```python
+def bind_state(
+    self,
+    store_or_context,  # ApplicationContext instance or raw state adapter
+    state_key,         # str — the key to watch in the store
+    read_transform=None,   # optional callable applied when reading from store → widget
+    write_transform=None,  # optional callable applied when writing from widget → store
+)
+```
+
+### Read and Write Transforms
+
+Pass optional callables to `read_transform` and `write_transform` to convert values as they flow between the widget and the store.
+
+```python
+# Display the stored username in uppercase in the label,
+# but store it exactly as the user types it in the input.
+display_label.bind_state(
+    store_or_context=self,
+    state_key="username",
+    read_transform=str.upper,   # store value → widget display
+)
+
+input_field.bind_state(
+    store_or_context=self,
+    state_key="username",
+    write_transform=str.strip,  # widget value → store (strip whitespace before saving)
+)
+```
+
+Transforms are plain Python callables — pass a lambda, a built-in like `str.upper`, or any function with the signature `(value) -> transformed_value`.

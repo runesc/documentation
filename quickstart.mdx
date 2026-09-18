@@ -1,47 +1,90 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Quickstart — Build Your First Qyro Engine App"
+sidebarTitle: "Quickstart"
+description: "Go from zero to a running native PySide6 window in four steps using Qyro Engine's ApplicationContext mixin and a single settings file."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This guide walks you through creating a minimal PySide6 desktop application with Qyro Engine. By the end you will have a native window with its title and platform set automatically from a JSON settings file — no boilerplate, no manual `QApplication` setup.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Install Qyro Engine with the PySide6 extra">
+    Install the package and the PySide6 binding in one command. Qyro Engine requires Python 3.11 or later.
 
     ```bash
-    npm install your-package
+    pip install "qyro-engine[pyside6]"
     ```
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
-    ```bash
-    your-cli init
+  <Step title="Create settings/base.json">
+    Create a `settings/` directory at your project root and add `base.json`. Qyro Engine reads this file automatically at startup — no import or path configuration needed.
+
+    ```json
+    {
+      "app_name": "My First App",
+      "binding": "PySide6",
+      "version": "1.0.0",
+      "author": "Your Name"
+    }
+    ```
+
+    The `binding` key tells Qyro Engine which UI framework adapter to load. The `app_name` value becomes the window title automatically.
+  </Step>
+
+  <Step title="Write main.py">
+    Create `main.py` at your project root. Mix `ApplicationContext` into your `QMainWindow` subclass — that is all the setup Qyro Engine needs.
+
+    ```python
+    import sys
+    from qyro_engine import ApplicationContext
+    from PySide6.QtWidgets import QMainWindow, QLabel
+
+    class MyApp(QMainWindow, ApplicationContext):
+        def __init__(self):
+            super().__init__()
+            self.setMinimumSize(640, 480)
+            label = QLabel(
+                f"App: {self.window_title}\n"
+                f"Platform: {self.platform.value}",
+                parent=self
+            )
+            label.move(50, 50)
+
+    if __name__ == "__main__":
+        window = MyApp()
+        window.show()
+        sys.exit(window.exec())
     ```
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+  <Step title="Run your app">
+    Launch the application from your project root directory so Qyro Engine can find `settings/base.json`.
 
     ```bash
-    your-cli start
+    python main.py
     ```
+
+    A 640×480 window opens with the title **My First App** and a label showing your app name and detected platform.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## What happens automatically
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+When `MyApp()` is constructed, Qyro Engine runs through the following steps before your `__init__` body executes:
+
+- **Settings loaded** — `settings/base.json` is read and merged with any platform-specific JSON file (`windows.json`, `mac.json`, or `linux.json`) if present.
+- **Platform detected** — the host OS is identified and exposed as `self.platform` (a `PlatformType` enum value such as `PlatformType.WINDOWS`).
+- **Framework adapter bootstrapped** — the `"binding": "PySide6"` entry triggers the PySide6 adapter, which creates the `QApplication` singleton for you.
+- **Window title applied** — `"app_name"` from `base.json` is set as the window title via `setWindowTitle()`.
+- **Application icon applied** — if `resources/base/icons/Icon.ico` (or another candidate) exists, it is applied to both the application and the window automatically.
+
+## Understanding `self.exec()`
+
+The `exec()` method on `ApplicationContext` is a universal event loop runner. On Qt it calls `QApplication.exec()`, on Tkinter it calls `mainloop()`, and on Kivy it calls the Kivy run loop — all through the same one-line call.
+
+<Note>
+  Always call `window.exec()` (or `sys.exit(window.exec())`) rather than `QApplication.exec()` directly. This keeps your startup code identical whether you later switch to PyQt6, PyQt5, or another binding.
+</Note>
+
+<Tip>
+  To build a Kivy or Tkinter app instead, change `"binding"` in `base.json` to `"kivy"` or `"tkinter"` and mix `ApplicationContext` into `kivy.app.App` or `tk.Tk` respectively. See the [Kivy Apps guide](/guides/kivy-apps) and [Tkinter Apps guide](/guides/tkinter-apps) for full examples.
 </Tip>

@@ -1,0 +1,199 @@
+---
+title: "Application Context: The Qyro Engine Runtime Façade"
+sidebarTitle: "App Context"
+description: "ApplicationContext is the primary mixin that wires the Qyro Engine runtime into your window class, giving you settings, resources, reactive state, and platform info."
+---
+
+`ApplicationContext` is the heart of every Qyro Engine application. It is a mixin class that you combine with your GUI base class — `QMainWindow`, `kivy.app.App`, or `tk.Tk` — and it automatically boots the engine runtime, reads your `settings/base.json`, discovers and applies the window title and icon, and exposes a unified API for platform detection, resource resolution, reactive state, and signals. You get all of this without writing any boilerplate bootstrap code.
+
+## Using ApplicationContext as a Mixin
+
+Inherit from your GUI base class first, then add `ApplicationContext`. Python's MRO resolves cooperative `super()` calls in left-to-right order, so placing `ApplicationContext` second ensures that `QMainWindow` (or the equivalent) is initialized first.
+
+```python
+import sys
+from PySide6.QtWidgets import QMainWindow, QLabel
+from qyro_engine import ApplicationContext
+
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+        self.setMinimumSize(800, 600)
+
+        # Window title and app icon are already set automatically from base.json.
+        # Access them at any time:
+        label = QLabel(
+            f"App: {self.metadata.app_name}\n"
+            f"Version: {self.metadata.version}\n"
+            f"Platform: {self.platform.value}\n"
+            f"Frozen: {self.is_frozen}",
+            parent=self,
+        )
+        label.move(40, 40)
+
+if __name__ == "__main__":
+    window = MyApp()
+    window.show()
+    sys.exit(window.exec())
+```
+
+<Note>
+`ApplicationContext` uses Python's MRO, so place it **after** the UI base class in the inheritance list when combining with Qt. Writing `class MyApp(ApplicationContext, QMainWindow)` reverses the cooperative `super()` chain and can prevent the C++ widget from being initialised correctly.
+</Note>
+
+## Auto-Configuration
+
+As soon as your `__init__` returns, `ApplicationContext` performs two automatic configuration steps:
+
+1. **Window title** — reads `app_name` from `settings/base.json` and calls the appropriate setter for your framework (`setWindowTitle`, `title()`, or the `title` attribute).
+2. **App icon** — searches `resources/<os>/icons/` and `resources/base/icons/` for a platform-appropriate icon file and applies it to both the window and the application singleton.
+
+You can override either value at any time using the `window_title` property or `set_window_icon()`.
+
+## Properties
+
+### Runtime Environment
+
+| Property | Type | Description |
+|---|---|---|
+| `is_frozen` | `bool` | `True` when running as a compiled PyInstaller executable. |
+| `platform` | `PlatformType` | Host OS: `windows`, `macos`, `linux`, `android`, `ios`, or `unknown`. |
+| `execution_mode` | `ExecutionMode` | Detailed mode: `source`, `pyinstaller`, `frozen_generic`, or `embedded`. |
+
+```python
+from qyro_engine.domain.entities import PlatformType
+
+if self.platform == PlatformType.WINDOWS:
+    print("Running on Windows")
+
+if self.is_frozen:
+    print(f"Execution mode: {self.execution_mode.value}")
+```
+
+### Window and Icon
+
+| Property | Type | Description |
+|---|---|---|
+| `window_title` | `str` | Read or set the main window title. |
+| `app_icon` | `str \| None` | Read or set the resolved icon path. |
+
+```python
+# Read
+print(self.window_title)
+
+# Set via property
+self.window_title = "My Updated Title"
+
+# Set via property
+self.app_icon = "icons/new_icon.ico"
+```
+
+### Settings and Metadata
+
+| Property | Type | Description |
+|---|---|---|
+| `app_settings` | `dict` | Merged dict from `base.json` and the active platform override. |
+| `metadata` | `AppMetadata` | Structured object with `app_name`, `version`, `author`, `identifier`, `description`. |
+
+```python
+print(self.metadata.app_name)
+print(self.metadata.version)
+
+api_url = self.app_settings.get("api_url", "https://api.example.com")
+```
+
+### Engine Internals
+
+| Property | Type | Description |
+|---|---|---|
+| `container` | `EngineContainer` | Direct access to the underlying dependency-injection container. |
+| `app` | `Any` | The native GUI application singleton (`QApplication`, Kivy `App`, etc.). |
+
+## Methods
+
+### Resource Resolution
+
+```python
+path: str = self.get_resource(*segments, required=True)
+```
+
+Resolves one or more path segments against the platform-specific resource directories and returns an absolute string path safe for use in `QIcon`, `QPixmap`, or stylesheets.
+
+```python
+icon_path = self.get_resource("icons", "Icon.ico")
+logo_path = self.get_resource("images", "logo.png")
+
+# Pass required=False to get the expected path even if the file is missing,
+# instead of raising ResourceNotFoundError:
+maybe_path = self.get_resource("images", "optional.png", required=False)
+```
+
+### Window Management
+
+```python
+success: bool = self.set_window_title(title, window=None)
+success: bool = self.set_window_icon(icon_path_or_relative, window=None)
+```
+
+Both methods accept an optional `window` argument. When omitted, they operate on `self`. `set_window_icon` accepts an absolute path or a relative resource path such as `"icons/app.ico"`.
+
+```python
+self.set_window_title("Dashboard — MyApp")
+self.set_window_icon("icons/dashboard.ico")
+```
+
+### Reactive State
+
+| Method | Description |
+|---|---|
+| `get_state(key, default=None)` | Retrieve a stored value by key. |
+| `set_state(key, value, sender="ui")` | Store a value and notify all active subscribers. |
+| `subscribe(key, callback) -> StateSubscription` | React to changes on a specific key. |
+| `emit_signal(name, data=None)` | Fire a named signal to all registered listeners. |
+| `on_signal(name, callback) -> StateSubscription` | Subscribe to a named signal. |
+
+See [Reactive State](/concepts/reactive-state) for a full walkthrough.
+
+### Application Loop
+
+```python
+exit_code: int = self.exec()
+exit_code: int = self.run()
+```
+
+`exec()` starts the framework event loop — calling `QApplication.exec()`, `tkinter.mainloop()`, or the Kivy runner depending on the detected binding. `run()` delegates to the framework adapter's `run()` method and is overridable in your subclass.
+
+## Kivy and Tkinter
+
+The same mixin pattern works across all supported frameworks:
+
+<CardGroup cols={2}>
+  <Card title="Kivy" icon="mobile">
+    ```python
+    from kivy.app import App
+    from qyro_engine import ApplicationContext
+
+    class MyMobileApp(App, ApplicationContext):
+        def build(self):
+            from kivy.uix.label import Label
+            return Label(
+                text=self.metadata.app_name
+            )
+    ```
+  </Card>
+  <Card title="Tkinter" icon="desktop">
+    ```python
+    import tkinter as tk
+    from qyro_engine import ApplicationContext
+
+    class MyTkApp(tk.Tk, ApplicationContext):
+        def __init__(self):
+            super().__init__()
+            self.geometry("640x480")
+    ```
+  </Card>
+</CardGroup>
+
+<Tip>
+You do not need to pass `framework="PySide6"` (or any other framework name) to `ApplicationContext`. The engine reads the `"binding"` or `"framework"` key from `settings/base.json` and boots the correct adapter automatically.
+</Tip>

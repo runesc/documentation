@@ -1,0 +1,106 @@
+{
+  "projectType": "framework",
+  "projectName": "Qyro Engine",
+  "projectDescription": "A Python runtime framework for building native desktop and mobile applications across Qt, Kivy, and Tkinter using a unified React-inspired component architecture.",
+  "theme": "luma",
+  "primaryColor": "#6C5CE7",
+  "lightColor": "#A29BFE",
+  "darkColor": "#4834D4",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/application-context",
+              "concepts/component-lifecycle",
+              "concepts/reactive-state",
+              "concepts/resource-system",
+              "concepts/settings"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/qt-apps",
+              "guides/kivy-apps",
+              "guides/tkinter-apps",
+              "guides/reactive-widgets",
+              "guides/packaging"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/api",
+              "reference/configuration",
+              "reference/errors",
+              "reference/platform-detection"
+            ]
+          },
+          {
+            "group": "Help",
+            "pages": [
+              "troubleshooting",
+              "changelog"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Unified ApplicationContext mixin for Qt, Kivy, and Tkinter",
+    "React-inspired Component lifecycle (component_will_mount, render, component_did_mount)",
+    "Reactive state store with two-way widget data binding",
+    "Automatic platform detection (Windows, macOS, Linux, Android, iOS)",
+    "Hierarchical JSON settings with platform-specific overrides",
+    "Multi-tier resource resolver supporting bundled (PyInstaller) and source modes",
+    "Auto-configured window title and icon from settings/base.json",
+    "Optional Sentry crash reporting integration",
+    "Pluggable UI framework adapters (PySide6, PyQt6, PyQt5, PySide2, Kivy, Tkinter)",
+    "Zero-dependency fallback with Tkinter adapter"
+  ],
+  "publicApiSurface": [
+    "ApplicationContext (class, qyro_engine)",
+    "Component (class, qyro_engine)",
+    "init_lifecycle (decorator, qyro_engine)",
+    "EngineContainer (class, qyro_engine)",
+    "PlatformDetector (class, qyro_engine)",
+    "PlatformType (enum, qyro_engine)",
+    "ExecutionMode (enum, qyro_engine)",
+    "AppMetadata (dataclass, qyro_engine)",
+    "get_resource(*segments, required) -> str",
+    "load_build_settings() -> dict",
+    "is_frozen() -> bool",
+    "ApplicationContext.get_state(key, default)",
+    "ApplicationContext.set_state(key, value, sender)",
+    "ApplicationContext.subscribe(key, callback) -> StateSubscription",
+    "ApplicationContext.emit_signal(name, data)",
+    "ApplicationContext.on_signal(name, callback) -> StateSubscription",
+    "ApplicationContext.get_resource(*segments, required) -> str",
+    "ApplicationContext.set_window_title(title, window)",
+    "ApplicationContext.set_window_icon(icon_path_or_relative, window)",
+    "ApplicationContext.exec() -> int",
+    "ApplicationContext.run() -> int",
+    "ReactiveLineEdit(state_key, store, parent)",
+    "ReactiveCheckBox(text, state_key, store, parent)",
+    "ReactiveLabel(text, state_key, store, parent)",
+    "ReactiveSlider(orientation, state_key, store, parent)",
+    "ReactiveSpinBox(state_key, store, parent)",
+    "QyroEngineError",
+    "ResourceNotFoundError",
+    "SettingsNotFoundError",
+    "FrameworkNotAvailableError"
+  ]
+}

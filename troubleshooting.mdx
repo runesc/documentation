@@ -1,0 +1,450 @@
+---
+title: "Troubleshooting Qyro Engine: Common Errors & Fixes"
+sidebarTitle: "Troubleshooting"
+description: "Diagnose and fix the most common Qyro Engine errors, from installation failures and missing settings to reactive state bugs and packaging issues."
+---
+
+When something goes wrong with your Qyro Engine application, the error message is usually your first clue. This page organises the most common problems by category — installation, settings, resources, reactive state, framework-specific quirks, and packaging — so you can get back to building as quickly as possible. Each accordion below describes the root cause and gives you concrete steps to resolve it.
+
+## Installation Issues
+
+<Accordion title='ModuleNotFoundError: No module named "PySide6"'>
+Qyro Engine does not install GUI toolkits by default — they are optional extras you must request explicitly. If you see this error at startup, install the correct extra:
+
+```python
+# Install with the PySide6 extra
+pip install "qyro-engine[pyside6]"
+```
+
+The same pattern applies to other bindings:
+
+```python
+pip install "qyro-engine[pyqt6]"
+pip install "qyro-engine[pyqt5]"
+pip install "qyro-engine[kivy]"
+```
+
+If you need everything in one go, use the `all` extra:
+
+```python
+pip install "qyro-engine[all]"
+```
+</Accordion>
+
+<Accordion title="FrameworkNotAvailableError on startup">
+`FrameworkNotAvailableError` is raised when the `binding` value in your `settings/base.json` names a framework that is not installed in your current Python environment. For example, if `base.json` contains `"binding": "PySide6"` but you only installed the `kivy` extra, the engine cannot load PySide6 and raises this error.
+
+**Fix:** Ensure the `binding` value and the installed extra match:
+
+```python
+# settings/base.json
+{
+    "binding": "PySide6",
+    "app_name": "My App"
+}
+```
+
+Then install the matching extra:
+
+```python
+pip install "qyro-engine[pyside6]"
+```
+
+<Note>
+The error message includes an `install_hint` field that prints the exact `pip install` command you need — read it carefully before searching further.
+</Note>
+</Accordion>
+
+<Accordion title="PySide6 / PyQt6 not compatible with Python 3.15+">
+PySide6 and PyQt6 currently support Python **3.11 – 3.14** only. If you are running Python 3.15 or later, both packages will either fail to install or raise import errors at runtime.
+
+**Fix:** Use a supported Python version. Create a virtual environment with Python 3.11–3.14:
+
+```python
+# Example: create a venv with Python 3.12
+python3.12 -m venv .venv
+source .venv/bin/activate   # macOS / Linux
+.venv\Scripts\activate      # Windows
+
+pip install "qyro-engine[pyside6]"
+```
+
+<Tip>
+If you need Python 3.15+ for other reasons, switch your binding to `tkinter`, which ships with CPython and has no version constraint.
+</Tip>
+</Accordion>
+
+---
+
+## Settings & Configuration
+
+<Accordion title='"SettingsNotFoundError" or window title shows "Qyro Application"'>
+Both symptoms point to the same root cause: Qyro Engine could not find a `settings/base.json` file in your project root. The window title falls back to the hard-coded default `"Qyro Application"` when `app_name` is missing, and `SettingsNotFoundError` is raised if the file is absent entirely.
+
+**Fix:** Create a `settings/base.json` file at the root of your project:
+
+```python
+# Project layout
+my_app/
+├── main.py
+├── settings/
+│   └── base.json       # <-- required
+└── resources/
+```
+
+A minimal `base.json` looks like this:
+
+```python
+{
+    "binding": "PySide6",
+    "app_name": "My App",
+    "version": "1.0.0"
+}
+```
+
+<Note>
+`base.json` is always loaded first. Platform-specific files (`windows.json`, `mac.json`, `linux.json`) are merged on top of it, so any key you omit in a platform file falls back to the value in `base.json`.
+</Note>
+</Accordion>
+
+<Accordion title="Settings changes not reflected at runtime">
+Qyro Engine loads settings once at startup using a hierarchical merge: `base.json` is read first, and then the platform override file (e.g. `windows.json`) is merged on top. If your change appears in the wrong file, or if you edited the override but the base value is shadowing it, you won't see the effect.
+
+**Checklist:**
+1. Confirm you saved the file you intended to edit.
+2. Remember that `base.json` is the foundation — edit it for cross-platform settings.
+3. For platform-specific values, add the key to the correct override (`windows.json`, `mac.json`, or `linux.json`).
+4. Restart the application after every settings change; settings are not hot-reloaded.
+
+```python
+# Verify what settings are actually loaded at runtime
+from qyro_engine import load_build_settings
+import pprint
+
+pprint.pprint(load_build_settings())
+```
+</Accordion>
+
+<Accordion title='Confusion between "binding" and "framework" keys'>
+Both `"binding"` and `"framework"` are accepted in `base.json` and mean the same thing: the name of the GUI toolkit the engine should load. The `"framework"` key exists for backward compatibility with projects migrated from the older `ppg_runtime` package.
+
+**Prefer `"binding"` in new projects:**
+
+```python
+{
+    "binding": "PySide6",
+    "app_name": "My App"
+}
+```
+
+If both keys are present, `"binding"` takes precedence. Remove `"framework"` from your settings to avoid ambiguity.
+</Accordion>
+
+---
+
+## Resources
+
+<Accordion title="ResourceNotFoundError when loading an asset">
+`ResourceNotFoundError` is raised when `get_resource()` (or `self.get_resource()` inside `ApplicationContext`) cannot find the requested file in any of the search scopes. The error message includes the exact paths that were searched.
+
+Qyro Engine looks for resources in this order:
+1. `resources/<current-os>/` (e.g. `resources/windows/`)
+2. `resources/base/`
+3. Directly inside `resources/`
+4. Inside the PyInstaller bundle (`sys._MEIPASS`) when frozen
+
+**Checklist:**
+- Verify the file exists under one of the paths above.
+- Check your path segments match the actual folder names — the resolver is case-sensitive on macOS and Linux.
+- Print the searched paths from the exception for a definitive answer:
+
+```python
+try:
+    path = self.get_resource("icons", "app.ico")
+except ResourceNotFoundError as e:
+    print(e.search_paths)   # exact list of directories checked
+```
+</Accordion>
+
+<Accordion title="Resources not found in a packaged (frozen) app">
+When you package your app with PyInstaller, the `resources/` and `settings/` directories are not automatically included in the bundle. At runtime the engine looks inside `sys._MEIPASS` for these paths, and if they are absent it raises `ResourceNotFoundError`.
+
+**Fix:** Add explicit `datas` entries to your `.spec` file:
+
+```python
+# myapp.spec
+a = Analysis(
+    ["main.py"],
+    ...
+    datas=[
+        ("settings", "settings"),     # copies settings/ into the bundle
+        ("resources", "resources"),   # copies resources/ into the bundle
+    ],
+    ...
+)
+```
+
+Rebuild after updating the spec:
+
+```python
+pyinstaller myapp.spec
+```
+
+<Warning>
+Do not hardcode `sys._MEIPASS` paths in your application code. Always use `get_resource()` — it resolves correctly in both source and frozen environments automatically.
+</Warning>
+</Accordion>
+
+<Accordion title="Suppressing ResourceNotFoundError for optional assets">
+If an asset is genuinely optional (e.g. a custom splash screen that might not ship in every edition of your app), pass `required=False` to suppress the exception and receive `None` instead:
+
+```python
+# Returns None instead of raising ResourceNotFoundError if the file is absent
+splash_path = self.get_resource("images", "splash.png", required=False)
+
+if splash_path:
+    self.show_splash(splash_path)
+```
+
+Use `required=True` (the default) for assets that must exist for the app to function correctly — this makes missing-asset bugs loud and easy to catch during development.
+</Accordion>
+
+---
+
+## State & Reactive Widgets
+
+<Accordion title='"StateKeyNotFoundError" when binding a reactive widget'>
+`StateKeyNotFoundError` is raised when you create a reactive widget (such as `ReactiveLineEdit` or `ReactiveLabel`) bound to a key that has not been registered in the state store yet. You must call `set_state()` with an initial value **before** constructing any widget that references that key.
+
+**Wrong order:**
+
+```python
+# ❌ Widget created before state key exists
+input_field = ReactiveLineEdit(state_key="username", store=self)
+self.set_state("username", "Ada Lovelace")   # too late
+```
+
+**Correct order:**
+
+```python
+# ✅ Register the key first, then create the widget
+self.set_state("username", "Ada Lovelace")
+input_field = ReactiveLineEdit(state_key="username", store=self)
+```
+</Accordion>
+
+<Accordion title="Reactive widget not updating when state changes">
+If you change state with `set_state()` but a reactive widget does not repaint, the most common cause is that `store=self` was omitted (or pointed to a different object) when constructing the widget.
+
+**Fix:** Always pass the `ApplicationContext` instance as `store`:
+
+```python
+from qyro_engine.reactive.widgets import ReactiveLabel
+
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+        self.set_state("status", "Ready")
+
+        # ✅ store=self connects the widget to this context's reactive store
+        self.status_label = ReactiveLabel(state_key="status", store=self)
+
+        # Later, this update will propagate to the label automatically
+        self.set_state("status", "Processing…")
+```
+
+Also confirm that the `state_key` string is spelled identically in both `set_state()` and the widget constructor — keys are case-sensitive.
+</Accordion>
+
+<Accordion title="Updating state safely from a background thread">
+`set_state()` is thread-safe by design. Under the hood, Qt-based bindings route GUI updates through Qt signals to ensure they execute on the main thread, so you do not need to use `QMetaObject.invokeMethod` or other manual synchronisation primitives.
+
+```python
+import threading
+from qyro_engine import ApplicationContext
+
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+        self.set_state("progress", 0)
+
+    def start_work(self):
+        def worker():
+            for i in range(1, 101):
+                # ✅ Safe to call from any thread
+                self.set_state("progress", i)
+
+        threading.Thread(target=worker, daemon=True).start()
+```
+
+<Note>
+Never directly manipulate Qt widget properties (e.g. `label.setText()`) from a background thread. Always route GUI updates through `set_state()` and let reactive widgets handle the repaint.
+</Note>
+</Accordion>
+
+---
+
+## Qt-Specific Issues
+
+<Accordion title="Window title is not set or displays incorrectly">
+`ApplicationContext` reads `app_name` from `settings/base.json` and calls `setWindowTitle()` automatically during initialisation. If the title is blank or missing, the most likely cause is that `base.json` does not define `app_name`.
+
+**Fix:**
+
+```python
+{
+    "binding": "PySide6",
+    "app_name": "My Application"
+}
+```
+
+You can also change the title at any point after initialisation:
+
+```python
+self.window_title = "Updated Title"   # reactive property on ApplicationContext
+```
+</Accordion>
+
+<Accordion title="Application icon is not applied">
+The engine auto-discovers icons from the `resources/` directory. If the icon is not appearing, run through this checklist:
+
+1. **File location** — the icon must be under `resources/base/icons/` (e.g. `Icon.ico` on Windows) or the OS-specific folder (`resources/mac/icons/`, `resources/linux/icons/`).
+2. **File format** — use `.ico` for Windows, `.png` for macOS and Linux.
+3. **Explicit override** — you can specify an icon explicitly via `"icon"` in `base.json` or call `set_window_icon()`:
+
+```python
+self.set_window_icon(self.get_resource("icons", "app.ico"))
+```
+</Accordion>
+
+<Accordion title='`exec()` vs `exec_()` — which should I use?'>
+Both work. `exec()` is the current PySide6/PyQt6 method name. `exec_()` is a backward-compatibility alias that was introduced in Qt5 bindings because `exec` was a reserved keyword in Python 2.
+
+Use `exec()` in all new code. `exec_()` continues to work for Qt5-based bindings (`PyQt5`, `PySide2`) if you are maintaining a legacy project:
+
+```python
+# ✅ Preferred for Qt6
+sys.exit(window.exec())
+
+# ✅ Still works with Qt5 bindings
+sys.exit(window.exec_())
+```
+</Accordion>
+
+<Accordion title='"RuntimeError: C++ object deleted" during initialisation'>
+This error occurs when `ApplicationContext` is not placed last in the method resolution order (MRO) when creating a class that inherits from both a Qt class and `ApplicationContext`. Python's MRO calls `__init__` methods in a specific order, and if `ApplicationContext.__init__` runs before the Qt object is fully constructed, the C++ layer may not be ready.
+
+**Fix:** Always list the Qt class **before** `ApplicationContext` in your class definition:
+
+```python
+# ✅ Correct MRO: Qt class first, ApplicationContext last
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()   # initialises QMainWindow, then ApplicationContext
+        ...
+```
+
+```python
+# ❌ Incorrect — may trigger C++ object errors
+class MyApp(ApplicationContext, QMainWindow):
+    ...
+```
+</Accordion>
+
+---
+
+## Kivy Issues
+
+<Accordion title="Kivy app does not start">
+If your app exits immediately on launch with no window, or you see an `ImportError` related to Kivy internals, the most likely cause is that Kivy is not installed. Install the `kivy` extra:
+
+```python
+pip install "qyro-engine[kivy]"
+```
+
+Also confirm your `settings/base.json` declares Kivy as the binding:
+
+```python
+{
+    "binding": "kivy",
+    "app_name": "My Mobile App"
+}
+```
+
+<Note>
+Kivy has system-level dependencies (SDL2, GLEW, etc.) on some platforms. If the install succeeds but the app still won't start, consult the [Kivy installation guide](https://kivy.org/doc/stable/gettingstarted/installation.html) for your OS.
+</Note>
+</Accordion>
+
+<Accordion title="`self.platform` shows UNKNOWN inside a Kivy app">
+Kivy does not always expose host OS information in a way that Qyro Engine's `PlatformDetector` can read reliably — particularly on Android and iOS. In that case `self.platform` resolves to `PlatformType.UNKNOWN`.
+
+**Workaround:** Use Python's standard `sys.platform` as a fallback for any platform-conditional logic:
+
+```python
+import sys
+from qyro_engine.domain.entities import PlatformType
+
+class MyMobileApp(App, ApplicationContext):
+    def build(self):
+        if self.platform != PlatformType.UNKNOWN:
+            current_os = self.platform.value
+        else:
+            # Fallback for Kivy mobile targets
+            current_os = sys.platform   # e.g. "android", "ios", "linux"
+```
+</Accordion>
+
+---
+
+## Packaging / PyInstaller
+
+<Accordion title="App crashes on launch when frozen with PyInstaller">
+A frozen app that crashes immediately almost always means the `settings/` or `resources/` directories were not included in the PyInstaller bundle. Without `settings/base.json`, the engine cannot determine the binding or app name and raises `SettingsNotFoundError` before any window appears.
+
+**Fix:** Add both directories to your `.spec` file's `datas` list:
+
+```python
+# myapp.spec
+a = Analysis(
+    ["main.py"],
+    ...
+    datas=[
+        ("settings", "settings"),
+        ("resources", "resources"),
+    ],
+    ...
+)
+```
+
+Rebuild the bundle:
+
+```python
+pyinstaller myapp.spec
+```
+</Accordion>
+
+<Accordion title="`is_frozen()` returns False in a packaged app">
+`is_frozen()` detects PyInstaller's `sys._MEIPASS` attribute to determine whether the app is running inside a bundle. If it returns `False` in a packaged app, the most likely cause is that you built the package with a tool other than PyInstaller (e.g. cx_Freeze or Briefcase), which set a different frozen marker.
+
+Full PyInstaller support is the only officially tested packaging path. If you must use another tool, check its documentation for how it signals a frozen environment and open an issue to request support.
+
+<Warning>
+Briefcase and cx_Freeze may partially work, but resource resolution in frozen bundles is only fully tested and supported with PyInstaller. Using an unsupported packager may cause `ResourceNotFoundError` at runtime.
+</Warning>
+</Accordion>
+
+<Accordion title="`sys._MEIPASS` paths differ across operating systems">
+The internal layout of a PyInstaller bundle varies between Windows, macOS, and Linux. Do **not** construct file paths by concatenating `sys._MEIPASS` manually — the relative sub-paths inside the bundle may differ across platforms and PyInstaller versions.
+
+Always use `get_resource()`, which handles the `sys._MEIPASS` lookup internally and normalises paths for you:
+
+```python
+# ❌ Fragile — breaks across platforms
+import sys, os
+icon = os.path.join(sys._MEIPASS, "resources", "base", "icons", "app.ico")
+
+# ✅ Safe — works in source and frozen environments on all platforms
+icon = self.get_resource("icons", "app.ico")
+```
+</Accordion>

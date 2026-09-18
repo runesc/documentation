@@ -1,0 +1,145 @@
+---
+title: "Resource System: Platform-Aware Asset Resolution"
+sidebarTitle: "Resources"
+description: "Qyro Engine's resource system finds assets in the right platform-specific directory — in development and inside PyInstaller frozen bundles."
+---
+
+Qyro Engine's resource system is a multi-tier asset resolver that locates files using a predictable directory hierarchy, both when you run your app from source and when you distribute it as a compiled PyInstaller executable. Instead of computing `__file__`-relative paths yourself or writing `sys._MEIPASS` guards, you call `get_resource()` with path segments and receive an absolute string path that is guaranteed to work in every environment.
+
+## Directory Structure
+
+Organise your assets under a `resources/` directory at your project root. Place platform-specific overrides in named subdirectories and shared fallbacks in `base/`:
+
+```
+my_app/
+├── resources/
+│   ├── base/             # All platforms — loaded as a fallback
+│   │   ├── icons/
+│   │   │   ├── Icon.ico
+│   │   │   └── 32.png
+│   │   └── images/
+│   │       └── logo.png
+│   ├── windows/
+│   │   └── icons/
+│   │       └── Icon.ico  # Windows-specific icon
+│   ├── mac/
+│   │   └── icons/
+│   │       └── 512.png   # macOS-specific high-res icon
+│   └── linux/
+│       └── icons/
+│           └── 256.png   # Linux-specific icon
+└── settings/
+    └── base.json
+```
+
+## Resolution Order
+
+When you call `get_resource("icons", "Icon.ico")`, the engine searches candidate directories in this order and returns the first match:
+
+<Steps>
+  <Step title="Platform-specific directory">
+    `resources/windows/` on Windows, `resources/mac/` on macOS, `resources/linux/` on Linux.
+  </Step>
+  <Step title="Base directory">
+    `resources/base/` — the universal fallback shared across all platforms.
+  </Step>
+  <Step title="Resources root">
+    `resources/` itself, which supports explicit calls such as `get_resource("base", "icons", "Icon.ico")`.
+  </Step>
+  <Step title="Bundle root (frozen only)">
+    When running as a PyInstaller executable, the engine searches the bundle directory (`sys._MEIPASS`) using the same sub-directory order above.
+  </Step>
+</Steps>
+
+## Calling `get_resource()`
+
+### On ApplicationContext
+
+```python
+path: str = self.get_resource(*segments, required=True)
+```
+
+Call this method anywhere inside an `ApplicationContext` subclass:
+
+```python
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+
+        # Resolves resources/windows/icons/Icon.ico on Windows,
+        # falling back to resources/base/icons/Icon.ico on other platforms.
+        icon_path = self.get_resource("icons", "Icon.ico")
+        self.set_window_icon(icon_path)
+
+        # Safe across all platforms and frozen bundles
+        logo_path = self.get_resource("images", "logo.png")
+```
+
+### On Component
+
+`Component` exposes the same `get_resource()` method so individual widgets can resolve their own assets without coupling to `ApplicationContext`:
+
+```python
+class AvatarWidget(QLabel, Component):
+    def render(self):
+        avatar_path = self.get_resource("images", "default_avatar.png")
+        self.setPixmap(QPixmap(avatar_path))
+```
+
+### Module-Level Shorthand
+
+Import and call `get_resource` directly when you need it outside a class context — for example, in a data-loading function or a utility module:
+
+```python
+from qyro_engine import get_resource
+
+splash_path = get_resource("images", "splash.png")
+font_path   = get_resource("fonts", "Inter-Regular.ttf")
+```
+
+## The `required` Parameter
+
+By default, `get_resource` raises `ResourceNotFoundError` if none of the candidate paths exist. Pass `required=False` to receive the expected (non-existent) path instead of an exception — useful for optional assets:
+
+```python
+# Raises ResourceNotFoundError if the file is missing:
+icon = self.get_resource("icons", "Icon.ico")
+
+# Returns the expected path string even if the file is absent:
+custom_bg = self.get_resource("images", "custom_bg.png", required=False)
+if Path(custom_bg).exists():
+    self.setStyleSheet(f"background-image: url({custom_bg});")
+```
+
+## Frozen Executable Support
+
+The API is identical whether your app runs from source or as a compiled binary. In a PyInstaller bundle, `sys._MEIPASS` replaces the project root and the same `resources/` sub-directory structure applies. You do not need any `if getattr(sys, "frozen", False)` guards in your code:
+
+```python
+# Works in development AND inside a PyInstaller --onefile bundle:
+icon_path = self.get_resource("icons", "Icon.ico")
+```
+
+Include your `resources/` directory in the PyInstaller spec with `--add-data` or via the `datas` list so the files are bundled:
+
+```python
+# In your .spec file:
+datas=[("resources", "resources")]
+```
+
+## Auto-Discovered App Icon
+
+`ApplicationContext` uses the resource system internally to auto-discover the application icon. It searches for platform-appropriate candidates (`Icon.ico` on Windows, `512.png` on macOS and Linux) across `resources/<os>/icons/` and `resources/base/icons/` at startup, then applies the first match to both the window and the application singleton — without any configuration required beyond placing the file in the right directory.
+
+You can also explicitly declare the icon path in `settings/base.json`:
+
+```json
+{
+  "app_name": "My App",
+  "icon": "icons/Icon.ico"
+}
+```
+
+<Note>
+Always use `get_resource()` instead of hardcoded or `__file__`-relative paths. Hardcoded paths break when your app is packaged as a frozen executable because the working directory and file layout change. `get_resource()` handles both environments transparently with a single call.
+</Note>

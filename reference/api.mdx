@@ -1,0 +1,765 @@
+---
+title: "Qyro Engine Python API Reference"
+sidebarTitle: "API Reference"
+description: "Complete reference for every public class, function, property, and decorator exported by Qyro Engine's Python package."
+---
+
+Qyro Engine exposes its entire public surface through a single top-level import. You can use module-level convenience functions for quick scripts, or work through `ApplicationContext` and `Component` for full lifecycle and state management in production apps.
+
+```python
+from qyro_engine import (
+    ApplicationContext,
+    Component,
+    init_lifecycle,
+    PlatformDetector,
+    PlatformType,
+    ExecutionMode,
+    AppMetadata,
+    get_resource,
+    load_build_settings,
+    is_frozen,
+)
+```
+
+---
+
+## Module-Level Functions
+
+These three helpers let you resolve resources, load settings, and detect the execution environment without constructing an `ApplicationContext`. Internally they share a single default `EngineContainer` instance that is created on first use.
+
+### `get_resource`
+
+Resolves one or more path segments to an absolute asset path inside the project's resources directory.
+
+<ParamField path="*segments" type="str" required>
+  One or more path segments that are joined to form the relative resource path (e.g. `"icons"`, `"app.ico"`).
+</ParamField>
+
+<ParamField path="required" type="bool" default="True">
+  When `True`, raises `ResourceNotFoundError` if the asset cannot be located. Pass `False` to receive the resolved path string regardless of whether the file exists on disk.
+</ParamField>
+
+**Returns** `str` — absolute path to the resolved resource.
+
+```python
+from qyro_engine import get_resource
+
+splash = get_resource("images", "splash.png")
+icon   = get_resource("icons", "app.ico", required=False)
+```
+
+---
+
+### `load_build_settings`
+
+Loads the merged settings dictionary from `base.json` and the active platform override file and returns it directly.
+
+**Returns** `dict` — the merged key/value settings map.
+
+```python
+from qyro_engine import load_build_settings
+
+settings = load_build_settings()
+print(settings["app_name"])
+print(settings.get("version", "1.0.0"))
+```
+
+---
+
+### `is_frozen` / `app_is_frozen`
+
+Returns `True` when the process is running as a bundled PyInstaller executable, `False` when running from source. `app_is_frozen` is a backward-compatible alias for the same function.
+
+**Returns** `bool`
+
+```python
+from qyro_engine import is_frozen
+
+if is_frozen():
+    base_dir = sys._MEIPASS
+else:
+    base_dir = Path(__file__).parent
+```
+
+---
+
+## `ApplicationContext`
+
+`ApplicationContext` is the central façade that wires together resource resolution, settings loading, reactive state, window management, and framework adapter initialisation. You can use it standalone or as a cooperative multiple-inheritance mixin alongside `QMainWindow`.
+
+### Constructor
+
+<ParamField path="framework" type="str | None" default="None">
+  UI framework to use. Accepted values: `"PySide6"`, `"PyQt6"`, `"PyQt5"`, `"PySide2"`, `"kivy"`, `"tkinter"`. When `None`, the engine auto-detects the first available binding.
+</ParamField>
+
+<ParamField path="custom_root" type="Path | None" default="None">
+  Override the project root used for settings and resource discovery.
+</ParamField>
+
+<ParamField path="enable_sentry" type="bool" default="True">
+  Enable Sentry error-reporting integration when the `sentry-sdk` extra is installed.
+</ParamField>
+
+<ParamField path="initial_state" type="dict | None" default="None">
+  Seed values for the reactive state store, keyed by state key strings.
+</ParamField>
+
+<ParamField path="argv" type="list[str] | None" default="None">
+  Command-line argument list forwarded to the underlying GUI framework (e.g. `sys.argv`). Defaults to `sys.argv` when `None`.
+</ParamField>
+
+**Standalone usage**
+
+```python
+from qyro_engine import ApplicationContext
+
+ctx = ApplicationContext(
+    framework="PySide6",
+    initial_state={"username": "", "dark_mode": False},
+)
+# ... build UI ...
+ctx.exec()
+```
+
+**Mixin with QMainWindow**
+
+```python
+from PySide6.QtWidgets import QMainWindow
+from qyro_engine import ApplicationContext
+
+class MainWindow(ApplicationContext, QMainWindow):
+    def __init__(self):
+        super().__init__(framework="PySide6")
+        self.setMinimumSize(800, 600)
+```
+
+---
+
+### Properties
+
+<ResponseField name="is_frozen" type="bool">
+  `True` when running as a compiled standalone executable.
+</ResponseField>
+
+<ResponseField name="platform" type="PlatformType">
+  The detected host operating system as a `PlatformType` enum member.
+</ResponseField>
+
+<ResponseField name="execution_mode" type="ExecutionMode">
+  Granular execution environment: `SOURCE`, `FROZEN_PYINSTALLER`, `FROZEN_GENERIC`, or `EMBEDDED`.
+</ResponseField>
+
+<ResponseField name="window_title" type="str">
+  Read/write property for the main window title. Reading returns the current title; assigning calls `set_window_title()` transparently across Qt, Tkinter, and Kivy.
+</ResponseField>
+
+<ResponseField name="app_icon" type="str | None">
+  Read/write property for the application icon path. Reading returns the resolved absolute path (or `None`); assigning calls `set_window_icon()`.
+</ResponseField>
+
+<ResponseField name="app_settings" type="dict">
+  The merged build settings dictionary (alias for `self.metadata.raw_settings`).
+</ResponseField>
+
+<ResponseField name="metadata" type="AppMetadata">
+  Structured application metadata object loaded from `base.json`.
+</ResponseField>
+
+<ResponseField name="container" type="EngineContainer">
+  Direct reference to the underlying `EngineContainer` dependency injection container.
+</ResponseField>
+
+<ResponseField name="app" type="Any">
+  The native GUI application singleton (e.g. `QApplication` or Kivy `App` instance).
+</ResponseField>
+
+---
+
+### Resource Methods
+
+#### `get_resource(*segments, required=True) -> str`
+
+Resolves path segments to an absolute resource path. Behaves identically to the module-level `get_resource()` but operates through the context's own `EngineContainer`.
+
+```python
+stylesheet = self.get_resource("styles", "dark.qss")
+icon_path  = self.get_resource("icons", "tray.ico")
+```
+
+---
+
+### State & Reactivity Methods
+
+#### `get_state(key, default=None) -> Any`
+
+Reads the current value of a state key from the reactive store.
+
+<ParamField path="key" type="str" required>
+  The state key to look up.
+</ParamField>
+
+<ParamField path="default" type="Any" default="None">
+  Value returned if the key has not been set.
+</ParamField>
+
+```python
+username = self.get_state("username", default="Guest")
+```
+
+---
+
+#### `set_state(key, value, sender="ui") -> None`
+
+Writes a new value to the reactive store, notifying all subscribers.
+
+<ParamField path="key" type="str" required>
+  The state key to update.
+</ParamField>
+
+<ParamField path="value" type="Any" required>
+  The new value.
+</ParamField>
+
+<ParamField path="sender" type="str" default='"ui"'>
+  An audit label identifying the source of the mutation.
+</ParamField>
+
+```python
+self.set_state("username", "alice")
+self.set_state("dark_mode", True, sender="settings_panel")
+```
+
+---
+
+#### `subscribe(key, callback) -> StateSubscription`
+
+Registers a callback that fires whenever the named state key changes.
+
+<ParamField path="key" type="str" required>
+  State key to observe.
+</ParamField>
+
+<ParamField path="callback" type="Callable[[Any], None]" required>
+  Function called with the new value each time the key is updated.
+</ParamField>
+
+**Returns** `StateSubscription` — call `.unsubscribe()` to remove the listener.
+
+```python
+sub = self.subscribe("dark_mode", lambda val: self.apply_theme(val))
+# Later:
+sub.unsubscribe()
+```
+
+---
+
+#### `emit_signal(name, data=None) -> None`
+
+Broadcasts a named signal across the reactive bus. Use this for cross-component communication that does not map to a single state key.
+
+```python
+self.emit_signal("user_logged_in", {"id": 42, "name": "alice"})
+```
+
+---
+
+#### `on_signal(name, callback) -> StateSubscription`
+
+Subscribes to a named signal emitted with `emit_signal()`.
+
+```python
+self.on_signal("user_logged_in", lambda data: print(data["name"]))
+```
+
+---
+
+### Window Management Methods
+
+#### `set_window_title(title, window=None) -> bool`
+
+Sets the window title on `window` (or `self` when used as a mixin). Works across Qt (`setWindowTitle`), Tkinter (`title()`), and Kivy (`title` attribute).
+
+**Returns** `bool` — `True` when the title was successfully applied to the native window.
+
+```python
+self.set_window_title("My App — Untitled Document")
+```
+
+---
+
+#### `set_window_icon(icon_path_or_relative, window=None) -> bool`
+
+Sets the application and window icon. Accepts an absolute path or a resource-relative path such as `"icons/app.ico"`.
+
+```python
+self.set_window_icon("icons/app.ico")
+```
+
+---
+
+### Lifecycle Methods
+
+#### `run() -> int`
+
+Starts the framework event loop via the engine's framework adapter. Override this in your subclass when you need custom startup logic.
+
+#### `exec() -> int`
+
+Starts the event loop, dispatching automatically to the appropriate mechanism:
+- Qt: `QApplication.exec()`
+- Tkinter: `mainloop()`
+- Kivy / adapter: `run()`
+
+#### `exec_() -> int`
+
+Qt backward-compatibility alias for `exec()`.
+
+```python
+ctx = ApplicationContext(framework="PySide6")
+window.show()
+raise SystemExit(ctx.exec())
+```
+
+---
+
+## `Component`
+
+`Component` is a base class (and cooperative mixin) for building reactive, lifecycle-driven widgets. It brings a React-inspired mount cycle to Qt widgets, Kivy widgets, and Tkinter frames.
+
+<Note>
+  When you subclass `Component`, the lifecycle runs automatically after `__init__` completes. You do **not** need to call lifecycle methods manually.
+</Note>
+
+**Lifecycle execution order:**
+
+1. `__init__` → cooperative `super().__init__` (e.g. `QWidget.__init__`)
+2. `component_will_mount()`
+3. `allow_bg()`
+4. `render()`
+5. `component_did_mount()`
+6. `set_css()`
+7. `responsive_ui()`
+8. `resizeEvent` → re-invokes `responsive_ui()` on every resize
+
+### Lifecycle Hooks
+
+#### `component_will_mount() -> None`
+
+Called immediately before `render()`. Override this to initialise instance variables, connect external data sources, or prepare state before any child widgets are created.
+
+```python
+def component_will_mount(self):
+    self.data = self.get_state("items", default=[])
+```
+
+---
+
+#### `render() -> None`
+
+Override this to construct all child widgets, layouts, and signal/slot connections. This is the primary hook for building your UI.
+
+```python
+def render(self):
+    layout = QVBoxLayout(self)
+    self.label = QLabel("Hello", self)
+    layout.addWidget(self.label)
+    self.setLayout(layout)
+```
+
+---
+
+#### `component_did_mount() -> None`
+
+Called after `render()` completes and all child widgets exist. Override this to perform post-render operations such as loading data into pre-built widgets or starting animations.
+
+```python
+def component_did_mount(self):
+    self.label.setText(self.data["welcome_message"])
+```
+
+---
+
+#### `set_css(path_or_qss=None) -> None`
+
+Applies a stylesheet to the component. You can pass:
+
+- An inline QSS string: `self.set_css("background: #1e1e2e; color: #cdd6f4;")`
+- A resource-relative path: `self.set_css("styles/card.qss")`
+- An absolute file path: `self.set_css("/abs/path/theme.qss")`
+- `None` (default): reads the class-level `CSS` or `STYLESHEET` attribute if defined.
+
+```python
+class Card(Component, QWidget):
+    CSS = "background: #313244; border-radius: 8px;"
+
+    def render(self):
+        ...  # set_css() picks up CSS automatically after render
+```
+
+---
+
+#### `responsive_ui() -> None`
+
+Called on mount and on every `resizeEvent`. Override to adapt layout or font sizes to the current widget dimensions.
+
+```python
+def responsive_ui(self):
+    if self.width() < 600:
+        self.sidebar.hide()
+    else:
+        self.sidebar.show()
+```
+
+---
+
+#### `allow_bg() -> None`
+
+Enables `Qt.WA_StyledBackground` on the widget so that `background-color`, `border`, and `border-radius` rules in your QSS are rendered correctly. Called automatically by the lifecycle; you rarely need to invoke it directly.
+
+---
+
+### Utility Methods
+
+#### `destroy_component() -> None`
+
+Safely detaches the widget from its parent (`setParent(None)`) and schedules it for deletion via `deleteLater()`. Use this instead of manually calling `deleteLater` to avoid dangling references.
+
+```python
+self.overlay.destroy_component()
+```
+
+---
+
+#### `find(target_type, name="") -> Any`
+
+Finds a child widget by type and optional `objectName`. Delegates to Qt's `findChild`.
+
+<ParamField path="target_type" type="type" required>
+  The Qt widget type to search for (e.g. `QPushButton`).
+</ParamField>
+
+<ParamField path="name" type="str" default='""'>
+  Optional `objectName` filter.
+</ParamField>
+
+```python
+btn = self.find(QPushButton, "submit_btn")
+```
+
+---
+
+#### `calc(a, b) -> int` *(static)*
+
+Computes a percentage-based pixel dimension: `int((a * b) / 100)`. Use it inside `responsive_ui()` to derive proportional sizes from the current widget dimensions.
+
+<ParamField path="a" type="float | int" required>
+  Base measurement (typically `self.width()` or `self.height()`).
+</ParamField>
+
+<ParamField path="b" type="float | int" required>
+  Percentage value (0–100).
+</ParamField>
+
+**Returns** `int` — the computed pixel value.
+
+```python
+def responsive_ui(self):
+    half_width = self.calc(self.width(), 50)   # 50 % of widget width
+    self.panel.setFixedWidth(half_width)
+```
+
+---
+
+#### `get_resource(*segments, required=True) -> str`
+
+Resolves a resource path from within a component without coupling to `ApplicationContext`. Delegates to the module-level `get_resource()`.
+
+---
+
+### Properties
+
+<ResponseField name="props" type="dict">
+  A dictionary of component properties, analogous to React props. Defaults to `{}` if not set explicitly. Assign a dict before or during construction to pass data into the component.
+</ResponseField>
+
+<ResponseField name="app_settings" type="dict">
+  The merged build settings dictionary. Equivalent to calling `load_build_settings()`.
+</ResponseField>
+
+<ResponseField name="is_frozen" type="bool">
+  `True` when running as a compiled standalone executable.
+</ResponseField>
+
+---
+
+### `init_lifecycle` Decorator
+
+Apply the component lifecycle to a class that does **not** subclass `Component` directly — for example, a `QWidget` subclass in a codebase where multiple inheritance is inconvenient.
+
+<ParamField path="cls" type="type" required>
+  The widget class to decorate.
+</ParamField>
+
+**Returns** the same class with lifecycle hooks wired into `__init__`.
+
+```python
+from qyro_engine import init_lifecycle
+from PySide6.QtWidgets import QWidget
+
+@init_lifecycle
+class Sidebar(QWidget):
+    def render(self):
+        ...
+
+    def set_css(self, _=None):
+        self.setStyleSheet("background: #1e1e2e;")
+```
+
+<Tip>
+  When you already inherit from `Component`, you do **not** need `@init_lifecycle`. The decorator is only for cases where direct subclassing is not possible.
+</Tip>
+
+---
+
+## Reactive Widgets
+
+Reactive widgets eliminate signal/slot boilerplate by binding Qt input widgets directly to Qyro state keys. Any state change automatically updates the widget, and any user interaction automatically writes back to the store.
+
+<Note>
+  Reactive widgets require a Qt binding (PySide6, PyQt6, PySide2, or PyQt5). The module auto-detects the active binding at import time.
+</Note>
+
+### `ReactiveWidgetMixin`
+
+The base mixin that all concrete reactive widgets extend. You can apply it to your own custom Qt widgets.
+
+#### `bind_state(store_or_context, state_key, read_transform=None, write_transform=None)`
+
+Connects the widget to a reactive state key.
+
+<ParamField path="store_or_context" type="ApplicationContext | StateAdapter" required>
+  An `ApplicationContext` instance or a raw state adapter.
+</ParamField>
+
+<ParamField path="state_key" type="str" required>
+  The state key to bind. Must be registered in the store (raises `StateKeyNotFoundError` if not found).
+</ParamField>
+
+<ParamField path="read_transform" type="Callable[[Any], Any] | None" default="None">
+  Optional function applied to the store value before it is pushed to the widget (e.g. convert to string, clamp a number).
+</ParamField>
+
+<ParamField path="write_transform" type="Callable[[Any], Any] | None" default="None">
+  Optional function applied to the widget value before it is written to the store.
+</ParamField>
+
+---
+
+### `ReactiveLineEdit`
+
+A `QLineEdit` with bidirectional text binding.
+
+<ParamField path="state_key" type="str">
+  State key holding the text value.
+</ParamField>
+<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+  State provider. Binding is skipped when `None`.
+</ParamField>
+<ParamField path="parent" type="QWidget | None">
+  Parent widget.
+</ParamField>
+
+```python
+from qyro_engine.reactive.widgets import ReactiveLineEdit
+
+name_input = ReactiveLineEdit("username", store=self, parent=self)
+```
+
+---
+
+### `ReactiveCheckBox`
+
+A `QCheckBox` with bidirectional boolean binding. The store value is coerced to `bool`.
+
+<ParamField path="text" type="str">
+  Label text shown next to the checkbox.
+</ParamField>
+<ParamField path="state_key" type="str">
+  State key holding the boolean value.
+</ParamField>
+<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+  State provider.
+</ParamField>
+<ParamField path="parent" type="QWidget | None">
+  Parent widget.
+</ParamField>
+
+```python
+from qyro_engine.reactive.widgets import ReactiveCheckBox
+
+dark_toggle = ReactiveCheckBox("Dark mode", "dark_mode", store=self, parent=self)
+```
+
+---
+
+### `ReactiveLabel`
+
+A `QLabel` that refreshes its text automatically when the bound state key changes. Read-only — user interaction does not write back to the store.
+
+<ParamField path="text" type="str">
+  Initial label text.
+</ParamField>
+<ParamField path="state_key" type="str">
+  State key whose value is displayed.
+</ParamField>
+<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+  State provider.
+</ParamField>
+<ParamField path="parent" type="QWidget | None">
+  Parent widget.
+</ParamField>
+
+```python
+from qyro_engine.reactive.widgets import ReactiveLabel
+
+status = ReactiveLabel("Ready", "status_message", store=self, parent=self)
+```
+
+---
+
+### `ReactiveSlider`
+
+A `QSlider` with bidirectional numeric binding. The store value is cast to `int`.
+
+<ParamField path="orientation" type="Qt.Orientation | int | None">
+  Slider orientation. Defaults to `1` (horizontal).
+</ParamField>
+<ParamField path="state_key" type="str">
+  State key holding the integer value.
+</ParamField>
+<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+  State provider.
+</ParamField>
+<ParamField path="parent" type="QWidget | None">
+  Parent widget.
+</ParamField>
+
+```python
+from qyro_engine.reactive.widgets import ReactiveSlider
+
+volume = ReactiveSlider(state_key="volume", store=self, parent=self)
+```
+
+---
+
+### `ReactiveSpinBox`
+
+A `QSpinBox` with bidirectional integer binding.
+
+<ParamField path="state_key" type="str">
+  State key holding the integer value.
+</ParamField>
+<ParamField path="store" type="ApplicationContext | StateAdapter | None">
+  State provider.
+</ParamField>
+<ParamField path="parent" type="QWidget | None">
+  Parent widget.
+</ParamField>
+
+```python
+from qyro_engine.reactive.widgets import ReactiveSpinBox
+
+quantity = ReactiveSpinBox("quantity", store=self, parent=self)
+```
+
+---
+
+## Enums and Data Classes
+
+### `PlatformType`
+
+Identifies the host operating system. Inherits from both `str` and `Enum`, so members compare equal to their string values.
+
+| Member | Value |
+|--------|-------|
+| `WINDOWS` | `"windows"` |
+| `MACOS` | `"macos"` |
+| `LINUX` | `"linux"` |
+| `ANDROID` | `"android"` |
+| `IOS` | `"ios"` |
+| `UNKNOWN` | `"unknown"` |
+
+<ResponseField name="is_desktop" type="bool">
+  `True` for `WINDOWS`, `MACOS`, and `LINUX`.
+</ResponseField>
+
+<ResponseField name="is_mobile" type="bool">
+  `True` for `ANDROID` and `IOS`.
+</ResponseField>
+
+```python
+from qyro_engine import PlatformType
+
+if ctx.platform.is_mobile:
+    print("Running on mobile")
+```
+
+---
+
+### `ExecutionMode`
+
+Describes how the application process was started.
+
+| Member | Value | When |
+|--------|-------|------|
+| `SOURCE` | `"source"` | Running from `.py` scripts |
+| `FROZEN_PYINSTALLER` | `"pyinstaller"` | Bundled with PyInstaller |
+| `FROZEN_GENERIC` | `"frozen_generic"` | Bundled with cx_Freeze, Briefcase, etc. |
+| `EMBEDDED` | `"embedded"` | Embedded in another process |
+
+```python
+from qyro_engine import ExecutionMode
+
+if ctx.execution_mode == ExecutionMode.FROZEN_PYINSTALLER:
+    log_path = Path(sys._MEIPASS) / "logs"
+```
+
+---
+
+### `AppMetadata`
+
+A frozen dataclass holding structured application metadata loaded from `base.json`.
+
+<ResponseField name="app_name" type="str">
+  Display name of the application.
+</ResponseField>
+
+<ResponseField name="version" type="str">
+  Version string (default `"0.1.0"`).
+</ResponseField>
+
+<ResponseField name="author" type="str">
+  Author or company name.
+</ResponseField>
+
+<ResponseField name="identifier" type="str">
+  Reverse-domain bundle identifier (e.g. `"com.example.myapp"`).
+</ResponseField>
+
+<ResponseField name="description" type="str">
+  Short application description.
+</ResponseField>
+
+<ResponseField name="raw_settings" type="dict">
+  The full merged settings dictionary for accessing arbitrary keys not covered by the named fields.
+</ResponseField>
+
+#### `get(key, default=None) -> Any`
+
+Looks up an arbitrary key in `raw_settings`, returning `default` when the key is absent.
+
+```python
+theme = self.metadata.get("theme", "light")
+debug = self.metadata.get("debug_mode", False)
+```

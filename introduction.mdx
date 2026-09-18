@@ -1,0 +1,117 @@
+---
+title: "Introduction to Qyro Engine — Python UI Framework"
+sidebarTitle: "Introduction"
+description: "Discover what Qyro Engine is, how its React-inspired architecture works, and which platforms and UI frameworks it supports out of the box."
+---
+
+Qyro Engine is a Python runtime framework that lets you build native desktop and mobile applications across Qt (PySide6, PyQt6, PySide2, PyQt5), Kivy, and Tkinter — without tying your code to any single toolkit. You write your app once using a clean mixin-based API, and Qyro Engine handles the boilerplate: bootstrapping the UI framework, loading your settings, discovering resources, detecting the host platform, and running the event loop.
+
+## What Qyro Engine does for you
+
+Qyro Engine sits between your application code and whichever UI framework you choose. Every time you subclass `ApplicationContext`, the engine automatically:
+
+- **Loads `settings/base.json`** and merges it with any platform-specific overrides (`windows.json`, `mac.json`, `linux.json`).
+- **Detects the host platform** — Windows, macOS, Linux (Ubuntu, Fedora, Arch), Android, or iOS — and exposes it through the `platform` property.
+- **Bootstraps the correct UI framework adapter** based on the `binding` key in `base.json`, with no extra setup in your code.
+- **Sets the window title and icon** from your settings and the `resources/` directory before your `__init__` body runs.
+- **Provides reactive state management** (`get_state`, `set_state`, `subscribe`, `emit_signal`) that works identically across all frameworks.
+
+## Key capabilities
+
+### Unified `ApplicationContext` mixin
+
+`ApplicationContext` is the central public API. You mix it into any window class — `QMainWindow`, `kivy.app.App`, `tk.Tk` — and immediately gain access to settings, resources, platform info, and state without writing any setup code.
+
+```python
+from qyro_engine import ApplicationContext
+from PySide6.QtWidgets import QMainWindow
+
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+        # self.platform, self.window_title, self.get_resource(),
+        # self.get_state(), self.set_state() are all ready to use here
+```
+
+### React-inspired `Component` lifecycle
+
+The `Component` base class brings a familiar lifecycle to your Qt widgets. Each component runs through a fixed sequence automatically when it is instantiated:
+
+1. `component_will_mount()` — runs before any UI is constructed
+2. `render()` — build child widgets and layouts
+3. `component_did_mount()` — runs after the UI tree exists
+4. `set_css()` — apply QSS stylesheets (file path or inline string)
+5. `responsive_ui()` — compute dimension-dependent layout (also fires on every `resizeEvent`)
+
+### Reactive state
+
+Qyro Engine ships a thread-safe in-memory state store. Call `set_state(key, value)` from anywhere and every `subscribe(key, callback)` listener is notified immediately. Two-way bound widgets in `qyro_engine.reactive.widgets` (`ReactiveLineEdit`, `ReactiveLabel`) update the store automatically when the user interacts with them.
+
+### Auto-detected settings and resources
+
+Place `settings/base.json` and a `resources/` folder at your project root. Qyro Engine finds them whether you run from source or inside a PyInstaller frozen bundle (`sys._MEIPASS`). Use `get_resource("icons", "512.png")` and the engine resolves the right platform-specific path for you.
+
+### Pluggable UI framework adapters
+
+Every UI framework is isolated behind a port interface. Swap `"binding": "PySide6"` to `"binding": "kivy"` in `base.json` and your application code stays unchanged. The adapters cover:
+
+| Extra | Framework | Qt generation |
+|---|---|---|
+| `pyside6` | PySide6 | Qt 6 (official) |
+| `pyqt6` | PyQt6 | Qt 6 (Riverbank) |
+| `pyqt5` | PyQt5 | Qt 5 (Riverbank) |
+| `pyside2` | PySide2 | Qt 5 (official) |
+| `kivy` | Kivy | — (multi-touch) |
+| *(none)* | Tkinter | — (built-in) |
+
+## Supported platforms
+
+Qyro Engine detects and supports the following host platforms at runtime:
+
+- **Windows** (all modern releases)
+- **macOS**
+- **Linux** — including Ubuntu, Fedora, and Arch-based distributions
+- **Android** (via Kivy)
+- **iOS** (via Kivy)
+
+## Installing UI framework extras
+
+The base package has no hard UI framework dependency. Install the extra that matches your target toolkit:
+
+```bash
+# Qt 6 — recommended for new projects
+pip install "qyro-engine[pyside6]"
+
+# Qt 6 — Riverbank binding
+pip install "qyro-engine[pyqt6]"
+
+# Qt 5
+pip install "qyro-engine[pyqt5]"
+
+# Mobile / multi-touch
+pip install "qyro-engine[kivy]"
+
+# Install all UI frameworks plus Sentry crash reporting
+pip install "qyro-engine[all]"
+```
+
+<Note>
+  Tkinter is part of the Python standard library and requires no extra. Set `"binding": "tkinter"` in `base.json` and you are ready to go with zero additional dependencies.
+</Note>
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Build a running PySide6 window in four steps.
+  </Card>
+  <Card title="Component Lifecycle" icon="rotate" href="/concepts/component-lifecycle">
+    Understand the full React-inspired lifecycle available through the `Component` base class.
+  </Card>
+  <Card title="Qt Apps Guide" icon="desktop" href="/guides/qt-apps">
+    A complete guide to building Qt apps with Qyro Engine.
+  </Card>
+  <Card title="Kivy Apps Guide" icon="mobile" href="/guides/kivy-apps">
+    Build cross-platform mobile and desktop apps with Kivy and Qyro Engine.
+  </Card>
+</CardGroup>

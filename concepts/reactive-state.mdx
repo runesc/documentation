@@ -1,0 +1,185 @@
+---
+title: "Reactive State: Thread-Safe Key-Value Store and Signals"
+sidebarTitle: "Reactive State"
+description: "Qyro Engine's reactive state system lets you store values, subscribe to changes, and fire named signals — all from any thread."
+---
+
+Qyro Engine ships a built-in reactive state system that works like a lightweight, framework-agnostic store. You store values under string keys, subscribe callbacks that fire whenever a value changes, and emit named signals for events that don't fit neatly into the key-value model. The store is backed by `ReactiveStoreAdapter`, a thread-safe in-memory implementation that dispatches notifications outside of its internal lock — so you can safely call `set_state` from background worker threads without risking GUI deadlocks.
+
+All state and signal methods are available directly on any `ApplicationContext` subclass.
+
+## Core API
+
+### Storing and Retrieving Values
+
+```python
+self.set_state(key, value, sender="ui")
+self.get_state(key, default=None)
+```
+
+`set_state` stores a value under the given key and immediately notifies all active subscribers. If the new value is identical to the current value, the store skips the update and no callbacks fire — preventing infinite loops in two-way bindings.
+
+```python
+# Store a value
+self.set_state("theme", "dark")
+
+# Read it back later
+theme = self.get_state("theme", default="light")
+print(theme)  # "dark"
+```
+
+### Subscribing to State Changes
+
+```python
+subscription = self.subscribe(key, callback)
+```
+
+`subscribe` registers a callback that receives the new value every time `set_state` is called for that key. It returns a `StateSubscription` handle. If the key already has a value in the store, the callback is called once immediately with the current value so you can initialise your UI without a separate `get_state` call.
+
+```python
+def on_theme_changed(new_theme: str):
+    print(f"Theme changed to: {new_theme}")
+
+sub = self.subscribe("theme", on_theme_changed)
+```
+
+### Unsubscribing
+
+Call `unsubscribe()` on the returned `StateSubscription` object to stop receiving updates:
+
+```python
+sub = self.subscribe("theme", on_theme_changed)
+
+# Later, when the component is destroyed:
+sub.unsubscribe()
+```
+
+The store automatically prunes inactive subscriptions on the next `set_state` call, so there is no need to track and manually remove them from a list.
+
+### Emitting and Receiving Signals
+
+```python
+self.emit_signal(name, data=None)
+subscription = self.on_signal(name, callback)
+```
+
+Use signals for one-off events that don't map to a persistent state key — things like `"user_logged_in"`, `"data_loaded"`, or `"export_complete"`. The `data` argument is passed directly to every registered callback.
+
+```python
+# Fire a signal from anywhere (including a background thread)
+self.emit_signal("export_complete", data={"path": "/tmp/report.pdf"})
+
+# Listen for it
+def on_export_done(payload):
+    print(f"Export saved to {payload['path']}")
+
+sig_sub = self.on_signal("export_complete", on_export_done)
+```
+
+## Practical Example: Counter App
+
+The following example wires a simple counter using `set_state`, `get_state`, and `subscribe`:
+
+```python
+import sys
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QPushButton
+from PySide6.QtCore import Qt
+from qyro_engine import ApplicationContext, Component
+
+class CounterWidget(QWidget, Component):
+    def component_will_mount(self):
+        # Initialise the counter state once — safe to call before render()
+        if self.get_state("count") is None:
+            self.set_state("count", 0)
+
+    def render(self):
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignCenter)
+        layout.setSpacing(16)
+
+        self._display = QLabel("0", self)
+        self._display.setAlignment(Qt.AlignCenter)
+
+        self._btn_inc = QPushButton("+1", self)
+        self._btn_dec = QPushButton("-1", self)
+        self._btn_reset = QPushButton("Reset", self)
+
+        layout.addWidget(self._display)
+        layout.addWidget(self._btn_inc)
+        layout.addWidget(self._btn_dec)
+        layout.addWidget(self._btn_reset)
+
+    def component_did_mount(self):
+        # Subscribe — callback fires immediately with the current value
+        self._count_sub = self.subscribe("count", self._refresh_display)
+
+        self._btn_inc.clicked.connect(self._increment)
+        self._btn_dec.clicked.connect(self._decrement)
+        self._btn_reset.clicked.connect(self._reset)
+
+    def _refresh_display(self, value: int):
+        self._display.setText(str(value))
+
+    def _increment(self):
+        current = self.get_state("count", 0)
+        self.set_state("count", current + 1)
+
+    def _decrement(self):
+        current = self.get_state("count", 0)
+        self.set_state("count", current - 1)
+
+    def _reset(self):
+        self.set_state("count", 0)
+        self.emit_signal("counter_reset", data={"previous": self.get_state("count")})
+
+    def destroy_component(self):
+        self._count_sub.unsubscribe()
+        super().destroy_component()
+
+
+class MainWindow(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+        self.setMinimumSize(400, 300)
+        counter = CounterWidget(parent=self)
+        self.setCentralWidget(counter)
+
+        # Listen for the reset signal at the app level
+        self.on_signal("counter_reset", lambda d: print("Counter was reset"))
+
+if __name__ == "__main__":
+    window = MainWindow()
+    window.show()
+    sys.exit(window.exec())
+```
+
+## StateSubscription Reference
+
+`subscribe()` and `on_signal()` both return a `StateSubscription` object:
+
+```python
+from qyro_engine.domain.state import StateSubscription
+```
+
+<Accordion title="StateSubscription fields and methods">
+
+| Member | Type | Description |
+|---|---|---|
+| `key` | `str` | The state key or signal name this subscription is bound to. |
+| `callback` | `Callable[[Any], None]` | The function called on each update. |
+| `is_active` | `bool` | `True` while the subscription is live; `False` after `unsubscribe()`. |
+| `unsubscribe()` | method | Sets `is_active = False`, permanently silencing this callback. |
+
+</Accordion>
+
+## Thread Safety
+
+The `ReactiveStoreAdapter` protects its internal dictionary and subscriber lists with a reentrant lock (`threading.RLock`). Callbacks are dispatched **after** the lock is released, so you can safely call `set_state` from a `QThread`, a `threading.Thread`, or a Kivy clock schedule without risking a deadlock.
+
+<Note>
+Callback functions run on whichever thread called `set_state`. If you update a Qt widget inside a subscriber callback and the callback fires from a background thread, use Qt's signal–slot mechanism or `QMetaObject.invokeMethod` to marshal the update back to the main thread.
+</Note>
+
+<Tip>
+Use `emit_signal` / `on_signal` for events that don't map to a specific state key — for example, `"user_logged_in"`, `"data_loaded"`, or `"network_error"`. Reserve `set_state` / `subscribe` for persistent values that multiple parts of your UI need to read and react to independently.
+</Tip>

@@ -1,0 +1,141 @@
+---
+title: "Installing Qyro Engine — Setup & Project Structure"
+sidebarTitle: "Installation"
+description: "Install Qyro Engine with pip or Poetry, choose your UI framework extra, and learn the expected project directory layout before writing your first app."
+---
+
+Qyro Engine is published to PyPI as `qyro-engine`. The base package has no hard UI framework dependency, so you install only the toolkit you actually need using Python extras. This page walks you through the requirements, the available extras, and the project structure Qyro Engine expects at runtime.
+
+## Requirements
+
+Qyro Engine requires **Python 3.11 or later** and supports up to Python 3.15.
+
+```
+python = ">=3.11,<3.16"
+```
+
+## Install the base package
+
+Install Qyro Engine without any UI framework bindings. This is useful for running tests or working with Tkinter, which is already bundled with Python.
+
+<CodeGroup>
+  ```bash pip
+  pip install qyro-engine
+  ```
+
+  ```bash Poetry
+  poetry add qyro-engine
+  ```
+</CodeGroup>
+
+## Install with a UI framework extra
+
+Choose the extra that matches the toolkit you want to build with. Qyro Engine reads the `binding` key from `settings/base.json` at runtime to load the correct adapter — there is no code change needed when you switch frameworks.
+
+### PySide6 (Qt 6, recommended)
+
+<CodeGroup>
+  ```bash pip
+  pip install "qyro-engine[pyside6]"
+  ```
+
+  ```bash Poetry
+  poetry add qyro-engine -E pyside6
+  ```
+</CodeGroup>
+
+### PyQt6 (Qt 6, Riverbank)
+
+<CodeGroup>
+  ```bash pip
+  pip install "qyro-engine[pyqt6]"
+  ```
+
+  ```bash Poetry
+  poetry add qyro-engine -E pyqt6
+  ```
+</CodeGroup>
+
+### PyQt5 (Qt 5)
+
+<CodeGroup>
+  ```bash pip
+  pip install "qyro-engine[pyqt5]"
+  ```
+
+  ```bash Poetry
+  poetry add qyro-engine -E pyqt5
+  ```
+</CodeGroup>
+
+### Kivy (mobile and multi-touch)
+
+<CodeGroup>
+  ```bash pip
+  pip install "qyro-engine[kivy]"
+  ```
+
+  ```bash Poetry
+  poetry add qyro-engine -E kivy
+  ```
+</CodeGroup>
+
+### All frameworks
+
+Install PySide6, PyQt6, PySide2, PyQt5, Kivy, and Sentry in one command.
+
+<CodeGroup>
+  ```bash pip
+  pip install "qyro-engine[all]"
+  ```
+
+  ```bash Poetry
+  poetry add qyro-engine -E all
+  ```
+</CodeGroup>
+
+<Note>
+  Tkinter requires no extra — it is part of the Python standard library. Set `"binding": "tkinter"` in `settings/base.json` and Qyro Engine will use it automatically.
+</Note>
+
+## Add Sentry crash reporting
+
+Qyro Engine includes an optional Sentry adapter for capturing unhandled exceptions in production. Install the `sentry` extra to enable it.
+
+<CodeGroup>
+  ```bash pip
+  pip install "qyro-engine[sentry]"
+  ```
+
+  ```bash Poetry
+  poetry add qyro-engine -E sentry
+  ```
+</CodeGroup>
+
+Sentry is automatically activated when `sentry-sdk` is available. You can disable it at runtime by passing `enable_sentry=False` to `ApplicationContext`.
+
+## Project structure
+
+Qyro Engine discovers your settings and resources automatically based on the following directory layout. Place these folders at your project root alongside `main.py`.
+
+```text
+myapp/
+├── main.py
+├── settings/
+│   ├── base.json          # required — app name, binding, version, author
+│   ├── windows.json       # optional — Windows-specific overrides
+│   ├── mac.json           # optional — macOS-specific overrides
+│   └── linux.json         # optional — Linux-specific overrides
+└── resources/
+    ├── base/
+    │   └── icons/         # cross-platform assets (e.g. Icon.ico, 16.png … 64.png)
+    ├── windows/           # Windows-specific assets
+    ├── mac/               # macOS-specific assets
+    └── linux/             # Linux-specific assets
+```
+
+At runtime, `get_resource("icons", "512.png")` first searches the platform-specific folder (`resources/windows/`, `resources/mac/`, or `resources/linux/`), then falls back to `resources/base/`. The same lookup works identically inside a PyInstaller frozen bundle.
+
+<Tip>
+  Name your primary application icon `Icon.ico` and place it in `resources/base/icons/`. Qyro Engine discovers it automatically and applies it to both the application and the window — no code required.
+</Tip>

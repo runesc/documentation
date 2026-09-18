@@ -1,0 +1,208 @@
+---
+title: "Building Qt Desktop Apps with Qyro Engine"
+sidebarTitle: "Qt Apps"
+description: "Build native Qt desktop applications using PySide6, PyQt6, PySide2, or PyQt5 with Qyro Engine's ApplicationContext mixin."
+---
+
+Qyro Engine supports all four major Qt Python bindings — PySide6, PyQt6, PySide2, and PyQt5. You declare which binding you want in a single `settings/base.json` file, and the engine automatically loads the correct adapter at runtime. Your application code stays identical regardless of which binding you choose.
+
+## Configure Your Qt Binding
+
+Create a `settings/base.json` file at the root of your project and set the `binding` key to the Qt package you want to use.
+
+<Tabs>
+  <Tab title="PySide6">
+    ```json
+    {
+      "binding": "PySide6",
+      "app_name": "My Qt App"
+    }
+    ```
+  </Tab>
+  <Tab title="PyQt6">
+    ```json
+    {
+      "binding": "PyQt6",
+      "app_name": "My Qt App"
+    }
+    ```
+  </Tab>
+  <Tab title="PySide2">
+    ```json
+    {
+      "binding": "PySide2",
+      "app_name": "My Qt App"
+    }
+    ```
+  </Tab>
+  <Tab title="PyQt5">
+    ```json
+    {
+      "binding": "PyQt5",
+      "app_name": "My Qt App"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  PySide6 and PyQt6 require Python `>=3.11,<3.15`. PyQt5 requires Python `>=3.11,<3.14`. Check your Python version before installing. PySide2 targets Python `<3.11`.
+</Note>
+
+## Build a Window with ApplicationContext
+
+The simplest way to use Qyro Engine with Qt is to mix `ApplicationContext` into your `QMainWindow` subclass. Qyro automatically reads your `settings/base.json`, creates the `QApplication` singleton, and sets the window title and icon — all before your `__init__` body runs.
+
+```python
+import sys
+from qyro_engine import ApplicationContext
+from PySide6.QtWidgets import QMainWindow, QLabel
+
+
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+        self.setMinimumSize(640, 480)
+
+        label = QLabel(
+            f"Title:    {self.window_title}\n"
+            f"Icon:     {self.app_icon}\n"
+            f"Platform: {self.platform.value} (Frozen: {self.is_frozen})",
+            parent=self,
+        )
+        label.move(50, 50)
+
+
+if __name__ == "__main__":
+    window = MyApp()
+    window.show()
+    sys.exit(window.exec())
+```
+
+<Steps>
+  <Step title="Declare your binding">
+    Add `"binding": "PySide6"` (or any supported binding) to `settings/base.json`. Qyro reads this key on startup.
+  </Step>
+  <Step title="Inherit from both QMainWindow and ApplicationContext">
+    List `QMainWindow` first in the MRO, then `ApplicationContext`. The cooperative `super().__init__()` chain handles both correctly.
+  </Step>
+  <Step title="Call window.show() then window.exec()">
+    Show the window, then start the event loop with `window.exec()`. This works across all Qt5 and Qt6 variants.
+  </Step>
+</Steps>
+
+## Component Lifecycle for Qt Widgets
+
+For sub-widgets and panels, mix `Component` into any `QWidget` subclass. Qyro automatically calls your lifecycle methods in the correct order after the C++ widget object is fully constructed.
+
+```python
+from qyro_engine.client.component import Component
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
+
+
+class UserCard(QWidget, Component):
+    def render(self):
+        """Build child widgets and layouts here."""
+        layout = QVBoxLayout(self)
+        self.name_label = QLabel("Loading...", parent=self)
+        self.action_btn = QPushButton("Click me", parent=self)
+        layout.addWidget(self.name_label)
+        layout.addWidget(self.action_btn)
+        self.setLayout(layout)
+
+    def component_did_mount(self):
+        """Run logic after widgets are fully constructed."""
+        self.name_label.setText("Ada Lovelace")
+        self.action_btn.clicked.connect(self.on_click)
+
+    def set_css(self):
+        """Apply stylesheets to this component."""
+        self.setStyleSheet("background-color: #1e1e2e; color: #cdd6f4; border-radius: 8px;")
+
+    def responsive_ui(self):
+        """Adjust layout based on current dimensions — called on mount and on every resize."""
+        if self.width() < 300:
+            self.name_label.setWordWrap(True)
+
+    def on_click(self):
+        print("Button pressed!")
+```
+
+The lifecycle runs in this order every time a `Component` subclass is instantiated:
+
+<Steps>
+  <Step title="component_will_mount()">
+    Called before any child widgets are built. Use it for pre-render setup such as loading data or configuring properties.
+  </Step>
+  <Step title="render()">
+    Build your widget tree here — create child widgets, set layouts, and wire internal connections.
+  </Step>
+  <Step title="component_did_mount()">
+    Called after `render()` completes. The widget tree is fully constructed and safe to interact with.
+  </Step>
+  <Step title="set_css()">
+    Apply QSS stylesheets. Pass an inline string, a resource path like `"styles/card.qss"`, or define a class-level `CSS` attribute.
+  </Step>
+  <Step title="responsive_ui()">
+    Adjust widget dimensions or visibility based on `self.width()` / `self.height()`. Also called automatically on every `resizeEvent`.
+  </Step>
+</Steps>
+
+## Window Management
+
+`ApplicationContext` exposes a cross-binding window management API that works identically across PySide6, PyQt6, PySide2, and PyQt5.
+
+```python
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+
+        # Read the current window title (set automatically from base.json "app_name")
+        print(self.window_title)
+
+        # Change the title at any time
+        self.set_window_title("Dashboard – v2.0")
+
+        # Or use the property setter
+        self.window_title = "Dashboard – v2.0"
+
+        # Set a window icon using a resource-relative path
+        self.set_window_icon("icons/app.ico")
+```
+
+| Member | Description |
+|---|---|
+| `self.window_title` | Property — reads or sets the main window title |
+| `self.set_window_title(title)` | Method — sets the title on `self` or any passed `window` |
+| `self.set_window_icon(path)` | Sets the icon using an absolute or resource-relative path |
+| `self.app_icon` | Property — returns the currently active icon path |
+
+## Accessing the QApplication Instance
+
+Use `self.app` to access the underlying `QApplication` singleton that Qyro created. This is useful when you need to call Qt application-level APIs directly.
+
+```python
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+
+        # Access the QApplication instance
+        q_app = self.app
+        q_app.setOrganizationName("Acme Corp")
+        q_app.setApplicationVersion("1.0.0")
+```
+
+## Running the Event Loop
+
+Call `self.exec()` to start the Qt event loop. Qyro's implementation handles the differences between Qt5 (`.exec_()`) and Qt6 (`.exec()`) automatically — you always call the same method.
+
+```python
+if __name__ == "__main__":
+    window = MyApp()
+    window.show()
+    sys.exit(window.exec())
+```
+
+<Tip>
+  You can use any standard Qt API alongside Qyro — the engine doesn't restrict or replace Qt functionality. `ApplicationContext` is purely additive: it gives you resource resolution, settings, reactive state, and lifecycle management on top of the Qt you already know.
+</Tip>

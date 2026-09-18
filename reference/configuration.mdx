@@ -1,0 +1,164 @@
+---
+title: "Configuring Your Qyro Engine Application"
+sidebarTitle: "Configuration"
+description: "Learn how to set up base.json and platform override files to configure your app's name, icon, framework, and version."
+---
+
+Qyro Engine reads its configuration from plain JSON files that sit inside a `settings/` directory in your project. The engine merges a `base.json` file with an optional platform-specific override at startup, then exposes the result through `ApplicationContext.app_settings`, `ApplicationContext.metadata`, and `Component.app_settings`. No environment variables or code changes are needed to switch between platforms.
+
+---
+
+## Settings File Keys
+
+The table below lists every recognised key. Unknown keys are preserved in `raw_settings` and are accessible via `self.metadata.get()`, so you can store your own custom configuration alongside the engine keys.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `app_name` | `string` | `"QyroApp"` | Application display name, used as the default window title. Read at runtime via `self.metadata.app_name`. |
+| `binding` / `framework` | `string` | auto-detect | UI framework to load. Accepted values: `"PySide6"`, `"PyQt6"`, `"PyQt5"`, `"PySide2"`, `"kivy"`, `"tkinter"`. |
+| `version` | `string` | `"1.0.0"` | Application version string. |
+| `author` | `string` | `""` | Author or company name. |
+| `identifier` | `string` | `"com.qyro.app"` | Reverse-domain bundle identifier (e.g. `"com.acme.invoicer"`). |
+| `description` | `string` | `""` | One-line description of the application. |
+| `icon` / `app_icon` | `string` | auto-detect | Resource-relative path to the primary icon (e.g. `"icons/Icon.ico"`). Overrides automatic icon discovery. |
+
+<Note>
+  `binding` and `framework` are interchangeable — the engine reads whichever key is present. If both are specified, `binding` takes precedence.
+</Note>
+
+---
+
+## Complete `base.json` Example
+
+```python
+# settings/base.json
+```
+
+```json
+{
+  "app_name": "Invoicer Pro",
+  "version": "2.1.0",
+  "author": "Acme Corp",
+  "identifier": "com.acme.invoicer",
+  "description": "Fast, cross-platform invoice management.",
+  "binding": "PySide6",
+  "icon": "icons/Icon.ico"
+}
+```
+
+---
+
+## Platform Override Files
+
+Platform overrides let you supply platform-specific values that are merged on top of `base.json` at runtime. Any key present in the override replaces the corresponding key from `base.json`.
+
+### Windows — `settings/windows.json`
+
+```json
+{
+  "icon": "icons/Icon.ico",
+  "app_name": "Invoicer Pro for Windows"
+}
+```
+
+### macOS — `settings/mac.json`
+
+```json
+{
+  "icon": "icons/512.png",
+  "app_name": "Invoicer Pro"
+}
+```
+
+### Linux — `settings/linux.json`
+
+```json
+{
+  "icon": "icons/256.png"
+}
+```
+
+<Tip>
+  You can also name the macOS override `darwin.json` and the Windows override `win32.json`. Qyro Engine checks both names for each platform.
+</Tip>
+
+---
+
+## Settings Discovery Order
+
+When `ApplicationContext` starts up it searches for a settings directory in the following order, stopping as soon as it finds a directory that contains `base.json`:
+
+<Accordion title="Full discovery sequence">
+
+1. **Custom root** — the path passed as `custom_root` to `ApplicationContext(custom_root=...)`, if provided.
+2. **`settings/`** — a `settings/` subdirectory in the project root.
+3. **`build/settings/`** — used by build pipelines that output to a `build/` directory.
+4. **`src/main/settings/`** — Maven-style project layout.
+5. **`src/build/settings/`** — alternative `src/`-rooted build output.
+6. **Project root itself** — looks for `base.json` directly in the root directory as a last resort.
+
+When running as a frozen PyInstaller bundle, "project root" is resolved to `sys._MEIPASS` (the temporary extraction directory) rather than the source tree.
+
+</Accordion>
+
+### Supplying a Custom Root Programmatically
+
+```python
+from pathlib import Path
+from qyro_engine import ApplicationContext
+
+ctx = ApplicationContext(
+    framework="PySide6",
+    custom_root=Path("/opt/myapp/config"),
+)
+```
+
+---
+
+## Reading Settings at Runtime
+
+Once the engine has loaded, you can access configuration values in three ways:
+
+```python
+# 1. Structured metadata fields
+print(self.metadata.app_name)
+print(self.metadata.version)
+print(self.metadata.identifier)
+
+# 2. Raw dictionary via app_settings
+theme = self.app_settings.get("theme", "light")
+
+# 3. metadata.get() with a default
+debug = self.metadata.get("debug_mode", False)
+```
+
+---
+
+## Pip Extras
+
+Install only the dependencies you need by specifying extras when you install Qyro Engine.
+
+| Extra | Installs |
+|-------|---------|
+| `pyside6` | PySide6 (Qt 6 official Python bindings) |
+| `pyqt6` | PyQt6 |
+| `pyside2` | PySide2 (Qt 5) |
+| `pyqt5` | PyQt5 |
+| `kivy` | Kivy |
+| `sentry` | `sentry-sdk` for error reporting |
+| `all` | All of the above |
+
+```bash
+# Install with PySide6 support
+pip install "qyro-engine[pyside6]"
+
+# Install with PySide6 and Sentry
+pip install "qyro-engine[pyside6,sentry]"
+
+# Install everything
+pip install "qyro-engine[all]"
+```
+
+<Warning>
+  Installing `all` pulls in every Qt binding simultaneously. In practice you should only install the one binding your app targets to avoid version conflicts.
+</Warning>

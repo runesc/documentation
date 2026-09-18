@@ -1,0 +1,206 @@
+---
+title: "Qyro Engine Error Types and Exception Handling"
+sidebarTitle: "Error Types"
+description: "Reference for every exception raised by Qyro Engine, with field descriptions and guidance on how to catch and recover from each."
+---
+
+Qyro Engine uses a structured exception hierarchy rooted at `QyroEngineError`. Every exception the engine raises is a subclass of this base, which means you can catch all engine errors with a single `except QyroEngineError` clause, or target specific failure modes with narrower handlers. All exception classes are importable directly from the top-level `qyro_engine` package.
+
+```python
+from qyro_engine import (
+    QyroEngineError,
+    ResourceNotFoundError,
+    SettingsNotFoundError,
+    FrameworkNotAvailableError,
+)
+from qyro_engine.domain.errors import (
+    StateError,
+    StateKeyNotFoundError,
+    PlatformUnsupportedError,
+)
+```
+
+---
+
+## `QyroEngineError`
+
+Base exception for all Qyro Engine runtime and domain errors. Catch this type when you want a single handler for any engine failure.
+
+<ResponseField name="message" type="str">
+  Human-readable description of the error.
+</ResponseField>
+
+<ResponseField name="details" type="str">
+  Optional supplementary information (e.g. paths searched, install hints). Empty string when not applicable.
+</ResponseField>
+
+```python
+from qyro_engine import QyroEngineError
+
+try:
+    ctx = ApplicationContext(framework="PySide6")
+    ctx.exec()
+except QyroEngineError as e:
+    print(e.message)
+    if e.details:
+        print("Details:", e.details)
+```
+
+---
+
+## `ResourceNotFoundError`
+
+Raised by `get_resource()` (both module-level and `ApplicationContext` / `Component` methods) when the requested asset cannot be located in any resource scope **and** `required=True` (the default).
+
+<ResponseField name="resource_name" type="str">
+  The joined relative path that was requested (e.g. `"icons/missing.ico"`).
+</ResponseField>
+
+<ResponseField name="search_paths" type="list[str]">
+  The ordered list of directories that were searched before the error was raised.
+</ResponseField>
+
+```python
+from qyro_engine import ResourceNotFoundError
+
+try:
+    path = self.get_resource("icons", "missing.ico")
+except ResourceNotFoundError as e:
+    print(e.resource_name)   # "icons/missing.ico"
+    print(e.search_paths)    # ["/path/to/resources", "/path/to/bundle", ...]
+```
+
+<Tip>
+  Pass `required=False` to suppress this error and receive the resolved path string regardless of whether the file exists on disk. This is useful when you want to test existence yourself before loading.
+</Tip>
+
+```python
+path = self.get_resource("icons", "optional_badge.png", required=False)
+if Path(path).exists():
+    self.badge.setPixmap(QPixmap(path))
+```
+
+---
+
+## `SettingsNotFoundError`
+
+Raised during engine initialisation when the settings discovery process cannot locate a `settings/` directory containing `base.json`. This typically means the working directory is wrong or the settings files have not been created yet.
+
+**How to recover:**
+
+- Verify that `base.json` exists in one of the [expected locations](/reference/configuration#settings-discovery-order).
+- Pass an explicit `custom_root` path to `ApplicationContext` pointing directly to the directory that contains your settings files.
+
+```python
+from qyro_engine import SettingsNotFoundError, ApplicationContext
+from pathlib import Path
+
+try:
+    ctx = ApplicationContext(framework="PySide6")
+except SettingsNotFoundError as e:
+    print("Could not find settings:", e.message)
+    # Fall back to a known location
+    ctx = ApplicationContext(
+        framework="PySide6",
+        custom_root=Path(__file__).parent / "config",
+    )
+```
+
+---
+
+## `FrameworkNotAvailableError`
+
+Raised when `ApplicationContext` is asked to load a UI framework that is not installed in the current Python environment. The error message includes an install hint.
+
+<ResponseField name="framework_name" type="str">
+  The name of the framework that could not be imported (e.g. `"PySide6"`).
+</ResponseField>
+
+**Common trigger:** specifying `binding: "PySide6"` in `base.json` or passing `framework="PySide6"` to `ApplicationContext` when PySide6 is not installed.
+
+```python
+from qyro_engine import FrameworkNotAvailableError, ApplicationContext
+
+try:
+    ctx = ApplicationContext(framework="PySide6")
+except FrameworkNotAvailableError as e:
+    print(f"Missing framework: {e.framework_name}")
+    print(e.details)  # Contains pip install hint
+```
+
+**Fix:** install the missing framework using the appropriate pip extra:
+
+```bash
+pip install "qyro-engine[pyside6]"
+```
+
+---
+
+## `StateError`
+
+Base class for all reactive state errors. Catch this type when you want to handle any state-related failure without targeting a specific sub-type.
+
+---
+
+## `StateKeyNotFoundError`
+
+Raised when you attempt to bind a reactive widget or subscribe to a state key that was never registered in the store.
+
+<ResponseField name="key" type="str">
+  The state key that could not be found.
+</ResponseField>
+
+**Common trigger:** passing a `state_key` to a reactive widget (e.g. `ReactiveLineEdit`) before that key has been added to `initial_state`.
+
+```python
+from qyro_engine.domain.errors import StateKeyNotFoundError
+from qyro_engine.reactive.widgets import ReactiveLineEdit
+
+try:
+    field = ReactiveLineEdit("typo_key", store=self, parent=self)
+except StateKeyNotFoundError as e:
+    print(f"Unregistered state key: {e.key}")
+```
+
+**Fix:** declare the key in `initial_state` when constructing `ApplicationContext`:
+
+```python
+ctx = ApplicationContext(
+    framework="PySide6",
+    initial_state={"username": "", "dark_mode": False},
+)
+```
+
+---
+
+## `PlatformUnsupportedError`
+
+Raised when Qyro Engine (or your own code via the engine's platform utilities) attempts an operation that is not supported on the current operating system.
+
+```python
+from qyro_engine.domain.errors import PlatformUnsupportedError
+
+try:
+    self.register_system_tray()
+except PlatformUnsupportedError as e:
+    print("System tray not available:", e.message)
+```
+
+<Warning>
+  `PlatformUnsupportedError` is not exported from the top-level `qyro_engine` package. Import it from `qyro_engine.domain.errors` directly.
+</Warning>
+
+---
+
+## Exception Hierarchy
+
+```
+Exception
+└── QyroEngineError
+    ├── ResourceNotFoundError
+    ├── SettingsNotFoundError
+    ├── FrameworkNotAvailableError
+    ├── StateError
+    │   └── StateKeyNotFoundError
+    └── PlatformUnsupportedError
+```

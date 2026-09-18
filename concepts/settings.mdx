@@ -1,0 +1,154 @@
+---
+title: "Settings: Hierarchical JSON Configuration for Your App"
+sidebarTitle: "Settings"
+description: "Qyro Engine auto-loads base.json and merges a platform-specific override, giving you typed metadata and a raw dict for custom keys."
+---
+
+Qyro Engine reads your application's configuration from a `settings/` directory at the project root. It always loads `settings/base.json` first, then overlays a platform-specific file on top — so you can share defaults across all platforms while still customising titles, icons, or API endpoints per OS. The merged result is available on every `ApplicationContext` instance as `self.app_settings` and as the structured `self.metadata` object.
+
+## File Loading Order
+
+<Steps>
+  <Step title="settings/base.json">
+    Loaded unconditionally on every platform. Define all shared defaults here.
+  </Step>
+  <Step title="Platform override">
+    Loaded after `base.json` and merged on top. Platform-specific keys replace the base values; keys absent from the override keep their base values.
+
+    | Platform | Files checked (first match wins) |
+    |---|---|
+    | Windows | `windows.json`, `win32.json` |
+    | macOS | `mac.json`, `darwin.json` |
+    | Linux | `linux.json` |
+  </Step>
+</Steps>
+
+## Recognised Keys in `base.json`
+
+The following keys are read by the engine at startup and mapped to `AppMetadata`:
+
+| Key | Type | Purpose |
+|---|---|---|
+| `app_name` | string | Window title and `metadata.app_name`. |
+| `binding` or `framework` | string | UI framework: `"PySide6"`, `"PyQt6"`, `"PyQt5"`, `"PySide2"`, `"kivy"`, `"tkinter"`. |
+| `version` | string | App version string; accessible as `metadata.version`. |
+| `author` | string | Author name; accessible as `metadata.author`. |
+| `identifier` | string | Reverse-domain bundle ID, e.g. `"com.example.myapp"`; accessible as `metadata.identifier`. |
+| `description` | string | Short app description; accessible as `metadata.description`. |
+| `icon` or `app_icon` | string | Relative resource path to the app icon, e.g. `"icons/Icon.ico"`. |
+
+Any additional keys you add are preserved in `self.app_settings` and are accessible via `self.app_settings.get("your_key")`.
+
+## Example Configuration
+
+**`settings/base.json`**
+
+```json
+{
+  "app_name": "Acme Dashboard",
+  "binding": "PySide6",
+  "version": "2.1.0",
+  "author": "Acme Corp",
+  "identifier": "com.acme.dashboard",
+  "description": "Internal analytics dashboard",
+  "icon": "icons/Icon.ico",
+  "api_url": "https://api.acme.com/v2",
+  "debug": false,
+  "max_reconnect_attempts": 5
+}
+```
+
+**`settings/windows.json`** (Windows override)
+
+```json
+{
+  "app_name": "Acme Dashboard for Windows",
+  "icon": "icons/Icon.ico",
+  "debug": true
+}
+```
+
+**`settings/mac.json`** (macOS override)
+
+```json
+{
+  "app_name": "Acme Dashboard",
+  "icon": "icons/512.png"
+}
+```
+
+On Windows, `app_name` resolves to `"Acme Dashboard for Windows"` and `debug` resolves to `true`. On macOS, `app_name` stays `"Acme Dashboard"` and `icon` points to the high-resolution PNG. All other keys take their values from `base.json` on every platform.
+
+## Accessing Settings in Code
+
+### Via `app_settings` (raw dict)
+
+`self.app_settings` returns the fully merged dictionary. Use it to read any key, including custom ones you added:
+
+```python
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+
+        api_url = self.app_settings.get("api_url", "https://localhost")
+        debug   = self.app_settings.get("debug", False)
+        retries = self.app_settings.get("max_reconnect_attempts", 3)
+
+        print(f"Connecting to {api_url} (debug={debug}, retries={retries})")
+```
+
+### Via `metadata` (typed object)
+
+`self.metadata` is an `AppMetadata` dataclass populated from the recognised keys:
+
+```python
+print(self.metadata.app_name)    # "Acme Dashboard"
+print(self.metadata.version)     # "2.1.0"
+print(self.metadata.author)      # "Acme Corp"
+print(self.metadata.identifier)  # "com.acme.dashboard"
+print(self.metadata.description) # "Internal analytics dashboard"
+```
+
+`AppMetadata` also exposes a `get()` helper for accessing the underlying `raw_settings` dict:
+
+```python
+api_url = self.metadata.get("api_url", "https://localhost")
+```
+
+### Module-Level Access
+
+Use `load_build_settings()` when you need the merged settings dict outside of a class — for example, in a standalone utility script or a data layer module:
+
+```python
+from qyro_engine import load_build_settings
+
+settings = load_build_settings()
+print(settings.get("api_url"))
+```
+
+## Settings Directory Auto-Discovery
+
+The engine searches for the settings directory in the following order and uses the first location that contains a `base.json` file:
+
+1. `<project_root>/settings/`
+2. `<project_root>/build/settings/`
+3. `<project_root>/src/main/settings/`
+4. `<project_root>/src/build/settings/`
+5. `<project_root>/` (root itself, for minimal single-file projects)
+
+In a frozen PyInstaller executable, `<project_root>` is replaced by `sys._MEIPASS` (the bundle extraction directory), so the same hierarchy applies.
+
+## Settings and the Framework Adapter
+
+When `ApplicationContext` boots, it reads the `"binding"` (or `"framework"`) key to determine which GUI framework adapter to load. This means you do **not** need to specify the framework in your Python code:
+
+```python
+# Qyro reads "binding": "PySide6" from base.json automatically.
+# No need to write ApplicationContext(framework="PySide6").
+class MyApp(QMainWindow, ApplicationContext):
+    pass
+```
+
+<Tip>
+Add any custom configuration your app needs directly to `base.json` — database connection strings, feature flags, API endpoints, theme names. They are all accessible via `self.app_settings.get("your_key")`. Use platform-specific override files to change only the keys that differ per OS, keeping the base file as the single source of truth for defaults.
+</Tip>

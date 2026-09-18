@@ -1,0 +1,222 @@
+---
+title: "Component Lifecycle: React-Inspired Widget Architecture"
+sidebarTitle: "Lifecycle"
+description: "The Component mixin gives Qt widgets a predictable mount, render, style, and resize lifecycle inspired by React class components."
+---
+
+`Component` is a mixin base class that wraps your Qt widgets in a predictable, React-inspired lifecycle. Instead of scattering initialization code across `__init__`, `showEvent`, and manual `resizeEvent` overrides, you implement focused hook methods — `component_will_mount`, `render`, `component_did_mount`, `set_css`, and `responsive_ui` — and Qyro Engine calls them in the correct order every time. The result is components that are easy to read, easy to test, and easy to compose.
+
+## Lifecycle Execution Order
+
+When a `Component` subclass is instantiated, Qyro Engine runs the following pipeline automatically once `__init__` returns:
+
+<Steps>
+  <Step title="__init__">
+    Your constructor runs, which calls `super().__init__()` (e.g. `QWidget.__init__` or `QFrame.__init__`). The C++ Qt object is fully constructed before any lifecycle hook fires.
+  </Step>
+  <Step title="component_will_mount()">
+    Pre-mount hook. Use this to initialise instance variables, connect signals to external services, or fetch data that `render()` will need — before any child widgets exist.
+  </Step>
+  <Step title="allow_bg()">
+    Automatically enables `Qt.WA_StyledBackground` on the widget so that stylesheet rules such as `background-color` and `border-radius` are rendered correctly on custom `QWidget` subclasses. You do not need to call this yourself.
+  </Step>
+  <Step title="render()">
+    Build all child widgets, set up layouts, and wire internal signal–slot connections. This is the equivalent of React's `render()` — it runs exactly once per component mount.
+  </Step>
+  <Step title="component_did_mount()">
+    Post-mount hook. At this point, every child widget created in `render()` exists and is attached to the layout. Use this for animations, focus management, or any action that requires the full widget tree to be present.
+  </Step>
+  <Step title="set_css()">
+    Applies the component stylesheet. The engine checks for a class-level `CSS` attribute first, then falls back to an empty no-op. You can also override `set_css()` directly or call it with a string argument.
+  </Step>
+  <Step title="responsive_ui()">
+    Performs the initial layout calculation. Called once on mount and then again **automatically on every `resizeEvent`** — you never need to override `resizeEvent` yourself.
+  </Step>
+</Steps>
+
+## Complete Component Example
+
+```python
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
+from PySide6.QtCore import Qt
+from qyro_engine import Component
+
+class UserCard(QWidget, Component):
+    # Class-level CSS attribute — set_css() picks this up automatically.
+    CSS = """
+        UserCard {
+            background-color: #1e1e2e;
+            border-radius: 12px;
+        }
+        QLabel#nameLabel {
+            color: #cdd6f4;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        QPushButton {
+            background-color: #89b4fa;
+            border-radius: 6px;
+            padding: 6px 16px;
+        }
+    """
+
+    def __init__(self, username: str, parent=None):
+        self._username = username          # Store data before lifecycle fires
+        self._label = None
+        super().__init__(parent)           # Triggers the lifecycle pipeline
+
+    def component_will_mount(self):
+        # Good place to initialise non-widget state
+        self._greeting = f"Hello, {self._username}!"
+
+    def render(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        self._label = QLabel(self._greeting, self)
+        self._label.setObjectName("nameLabel")
+        self._label.setAlignment(Qt.AlignCenter)
+
+        self._button = QPushButton("View Profile", self)
+
+        layout.addWidget(self._label)
+        layout.addWidget(self._button)
+
+    def component_did_mount(self):
+        # Wire connections after child widgets exist
+        self._button.clicked.connect(self._on_view_profile)
+
+    def responsive_ui(self):
+        # Adapt layout to current widget width
+        side_margin = self.calc(self.width(), 8)   # 8% of width
+        self.layout().setContentsMargins(
+            side_margin, 20, side_margin, 20
+        )
+
+    def _on_view_profile(self):
+        print(f"Opening profile for {self._username}")
+```
+
+## Applying Stylesheets with `set_css()`
+
+`set_css()` accepts four input forms:
+
+<CardGroup cols={2}>
+  <Card title="Class-level CSS attribute" icon="code">
+    ```python
+    class MyCard(QWidget, Component):
+        CSS = "background: #1e1e2e; color: #fff;"
+    ```
+    The engine calls `set_css()` automatically and picks up `CSS` without any extra wiring.
+  </Card>
+  <Card title="Inline QSS string" icon="paintbrush">
+    ```python
+    def set_css(self):
+        super().set_css(
+            "background: #313244; border-radius: 8px;"
+        )
+    ```
+    Pass a QSS string directly if you prefer to build it programmatically.
+  </Card>
+  <Card title="Relative resource path" icon="folder">
+    ```python
+    def set_css(self):
+        super().set_css("styles/card.qss")
+    ```
+    The engine resolves the path through `get_resource()`, so it works in both dev and frozen builds.
+  </Card>
+  <Card title="Absolute file path" icon="file">
+    ```python
+    def set_css(self):
+        super().set_css("/opt/myapp/themes/dark.qss")
+    ```
+    Use an absolute path when the stylesheet lives outside the resources directory.
+  </Card>
+</CardGroup>
+
+## Responsive Layouts with `responsive_ui()`
+
+Override `responsive_ui()` to adapt your layout to the current widget dimensions. The engine calls it once on mount and then again every time `resizeEvent` fires — your component is always responsive without any extra plumbing.
+
+Use the `calc()` static helper to convert percentages into pixel values:
+
+```python
+def responsive_ui(self):
+    # calc(total, percent) -> int
+    half_width = self.calc(self.width(), 50)   # 50% of current width
+    top_height = self.calc(self.height(), 30)  # 30% of current height
+
+    self._header.setFixedWidth(half_width)
+    self._header.setFixedHeight(top_height)
+```
+
+## Utility Methods
+
+### Destroying a Component
+
+Call `destroy_component()` to safely detach a widget from its parent and schedule it for deletion via Qt's deferred `deleteLater()` mechanism:
+
+```python
+def on_close_clicked(self):
+    self.destroy_component()
+```
+
+### Finding a Child Widget
+
+Use `find()` to locate a child widget by type and optional object name — a thin wrapper over Qt's `findChild()`:
+
+```python
+label = self.find(QLabel, "nameLabel")
+button = self.find(QPushButton)
+```
+
+### Accessing Props
+
+`props` is a React-style dictionary for passing data into a component from its parent:
+
+```python
+class ProfileCard(QWidget, Component):
+    def render(self):
+        name = self.props.get("username", "Guest")
+        label = QLabel(name, self)
+
+# Usage
+card = ProfileCard(parent=self)
+card.props = {"username": "Ada Lovelace"}
+```
+
+## Using the `init_lifecycle` Decorator
+
+If you cannot (or prefer not to) subclass `Component` directly — for example, when mixing with a complex widget hierarchy that already has a `__init_subclass__` hook — use the `init_lifecycle` decorator instead:
+
+```python
+from PySide6.QtWidgets import QFrame
+from qyro_engine import init_lifecycle
+
+@init_lifecycle
+class SidePanel(QFrame):
+    def render(self):
+        # Lifecycle hooks still fire in the correct order
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Side Panel", self))
+
+    def responsive_ui(self):
+        pass
+```
+
+## Backward Compatibility
+
+`PPGLifeCycle` is an alias for `Component` retained for projects that were built on earlier versions of Qyro Engine:
+
+```python
+from qyro_engine import PPGLifeCycle  # Same as Component
+
+class LegacyWidget(QWidget, PPGLifeCycle):
+    def render(self):
+        pass
+```
+
+<Warning>
+Do **not** combine `Component` and `ApplicationContext` on the same class. `Component` manages widget-level lifecycle (mount, render, style, resize) while `ApplicationContext` manages application-level lifecycle (engine boot, settings, window management). They serve distinct roles and operate at different layers of the architecture.
+</Warning>

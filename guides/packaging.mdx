@@ -1,0 +1,128 @@
+---
+title: "Packaging Qyro Apps as Standalone Executables"
+sidebarTitle: "Packaging"
+description: "Package your Qyro Engine app as a self-contained executable with PyInstaller — including settings, resources, and frozen-mode detection."
+---
+
+Qyro Engine detects PyInstaller bundles automatically. When your app runs as a packaged executable, the engine switches to `ExecutionMode.FROZEN_PYINSTALLER` and re-roots all resource lookups to `sys._MEIPASS` — the directory PyInstaller extracts your bundle into at runtime. Your `get_resource()` calls, settings loading, and platform detection all work identically in source and frozen modes without any code changes.
+
+## Install PyInstaller
+
+```python
+pip install pyinstaller
+```
+
+## Build a Single-File Executable
+
+Run PyInstaller from your project root, pointing it at your entry-point script:
+
+```python
+pyinstaller --onefile --windowed main.py
+```
+
+- `--onefile` produces a single portable `.exe` (Windows) or binary (macOS/Linux).
+- `--windowed` suppresses the terminal console window on Windows and macOS — use this for GUI apps.
+
+## Include Settings and Resources
+
+PyInstaller does not automatically bundle data files. Add `datas` entries for your `settings/` and `resources/` directories in your `.spec` file so they are included in the build:
+
+```python
+# main.spec
+a = Analysis(
+    ["main.py"],
+    ...
+    datas=[
+        ("settings", "settings"),
+        ("resources", "resources"),
+    ],
+    ...
+)
+```
+
+The first element of each tuple is the source path (relative to your project root); the second is the destination path inside the bundle. Qyro Engine expects these directories at the paths shown above.
+
+<Warning>
+  Always test your packaged app before distributing it. Missing `datas` entries for `settings/` or `resources/` are the most common cause of crashes in frozen mode — the engine will raise `ResourceNotFoundError` or fail to load `base.json` if these directories are absent from the bundle.
+</Warning>
+
+## How Qyro Resolves Resources When Frozen
+
+When PyInstaller runs your app, it extracts bundle contents to a temporary directory exposed as `sys._MEIPASS`. Qyro's resource adapter detects this automatically and uses `sys._MEIPASS` as the root for all `get_resource()` lookups. You do not need to change any resource call — the same path segments you use in development resolve correctly in the packaged binary.
+
+```python
+# Works identically in development and in the packaged .exe
+icon = self.get_resource("icons", "Icon.ico")
+config = self.get_resource("settings", "base.json")
+```
+
+## Checking Frozen State at Runtime
+
+Use `is_frozen` to branch behaviour based on whether the app is running from source or as a packaged executable.
+
+```python
+from qyro_engine import is_frozen, ExecutionMode
+
+# Module-level function
+if is_frozen():
+    print("Running as a packaged app")
+
+# Property on ApplicationContext
+class MyApp(QMainWindow, ApplicationContext):
+    def __init__(self):
+        super().__init__()
+        print(self.is_frozen)          # True in packaged build
+        print(self.execution_mode)     # ExecutionMode.FROZEN_PYINSTALLER or ExecutionMode.SOURCE
+```
+
+### ExecutionMode Enum
+
+| Value | Description |
+|---|---|
+| `ExecutionMode.SOURCE` | Running directly from Python source files (development) |
+| `ExecutionMode.FROZEN_PYINSTALLER` | Running inside a PyInstaller bundle |
+
+### Conditional Behaviour Example
+
+```python
+from qyro_engine import is_frozen, ExecutionMode
+
+if is_frozen():
+    # Running as packaged app — resolve an optional log path from the bundle
+    log_path = get_resource("logs", "app.log", required=False)
+else:
+    # Running in development — use a local path
+    log_path = "logs/app.log"
+```
+
+<Tip>
+  Use `required=False` in `get_resource()` calls for optional assets. This prevents `ResourceNotFoundError` when an asset is intentionally absent in certain build configurations — for example, a log directory that only exists in packaged builds, or a development-only fixture file that is excluded from the release bundle.
+</Tip>
+
+## Full Packaging Checklist
+
+<Steps>
+  <Step title="Install PyInstaller">
+    ```python
+    pip install pyinstaller
+    ```
+  </Step>
+  <Step title="Generate an initial .spec file">
+    ```python
+    pyinstaller --onefile --windowed --name MyApp main.py
+    ```
+    PyInstaller creates `MyApp.spec` in your project root.
+  </Step>
+  <Step title="Add datas entries to the .spec file">
+    Open `MyApp.spec` and add your `settings/` and `resources/` directories to the `datas` list inside the `Analysis()` call.
+  </Step>
+  <Step title="Rebuild from the .spec file">
+    ```python
+    pyinstaller MyApp.spec
+    ```
+    The final executable lands in `dist/MyApp` (or `dist/MyApp.exe` on Windows).
+  </Step>
+  <Step title="Test the packaged binary">
+    Run the executable from `dist/` and verify that settings load, resources resolve, and the UI renders correctly before distributing.
+  </Step>
+</Steps>

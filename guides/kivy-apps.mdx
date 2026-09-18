@@ -1,0 +1,115 @@
+---
+title: "Building Kivy Mobile & Desktop Apps with Qyro"
+sidebarTitle: "Kivy Apps"
+description: "Build touch-friendly Kivy apps for Android, iOS, and desktop with Qyro Engine's ApplicationContext mixin and resource resolver."
+---
+
+Kivy support in Qyro Engine brings mobile-friendly touch UIs and cross-platform deployment to Android, iOS, and desktop into the same ergonomic mixin pattern you use for Qt. Mix `ApplicationContext` into your `kivy.app.App` subclass and gain instant access to settings, resource resolution, platform detection, and reactive state — without changing how you write Kivy code.
+
+## Install Qyro Engine with Kivy Support
+
+Kivy is an optional dependency. Install it by requesting the `kivy` extra:
+
+```python
+pip install "qyro-engine[kivy]"
+```
+
+<Note>
+  The base `pip install qyro-engine` does not pull in Kivy. Always include the `[kivy]` extra when targeting Kivy projects.
+</Note>
+
+## Configure Your Binding
+
+Create `settings/base.json` at the root of your project and set `"binding"` to `"kivy"`:
+
+```json
+{
+  "binding": "kivy",
+  "app_name": "My Mobile App"
+}
+```
+
+## Build a Kivy App
+
+Mix `ApplicationContext` into your `App` subclass exactly as you would with Qt. The mixin is binding-agnostic — the same `build_settings`, `get_resource`, `platform`, and `is_frozen` APIs are available regardless of which UI toolkit you're using.
+
+```python
+from kivy.app import App
+from kivy.uix.label import Label
+from qyro_engine import ApplicationContext
+
+
+class MyMobileApp(App, ApplicationContext):
+    def build(self):
+        # Read settings loaded from settings/base.json
+        app_name = self.build_settings.get("app_name", "Kivy Mobile App")
+        self.title = app_name
+
+        # Safely resolve a bundled resource (returns absolute path)
+        # logo_path = self.get_resource("images", "logo.png")
+
+        return Label(text=f"Welcome to {app_name}!\nPlatform: {self.platform.value}")
+
+
+if __name__ == "__main__":
+    app = MyMobileApp()
+    app.run()
+```
+
+<Steps>
+  <Step title="Set binding in base.json">
+    Add `"binding": "kivy"` so Qyro loads the Kivy adapter automatically on startup.
+  </Step>
+  <Step title="Inherit from App and ApplicationContext">
+    List `App` first in the MRO so Kivy's `build()` machinery works correctly. `ApplicationContext` is a cooperative mixin that doesn't interfere.
+  </Step>
+  <Step title="Access Qyro APIs inside build()">
+    `self.build_settings`, `self.get_resource()`, `self.platform`, and `self.is_frozen` are all available as soon as `__init__` completes.
+  </Step>
+  <Step title="Call app.run()">
+    Start the Kivy event loop with the standard `app.run()` call — no Qyro-specific runner needed.
+  </Step>
+</Steps>
+
+## Settings, Resources, and Platform Detection
+
+All `ApplicationContext` service APIs work identically inside a Kivy app.
+
+```python
+class MyMobileApp(App, ApplicationContext):
+    def build(self):
+        # Read any key from settings/base.json (merged with os-specific overrides)
+        version = self.build_settings.get("version", "1.0")
+        theme   = self.build_settings.get("theme", "dark")
+
+        # Resolve a bundled asset — works in source and in frozen APK/IPA builds
+        splash_path = self.get_resource("images", "splash.png")
+
+        # Check the current execution mode
+        print(self.execution_mode.value)   # "source" or "frozen_pyinstaller"
+
+        # Detect the host platform
+        print(self.platform.value)         # "android", "ios", "windows", "macos", "linux", …
+
+        from kivy.uix.image import Image
+        return Image(source=splash_path)
+```
+
+<CardGroup cols={2}>
+  <Card title="build_settings" icon="gear">
+    Dictionary of all merged settings from `settings/base.json` and any OS-specific overrides (e.g. `settings/android.json`).
+  </Card>
+  <Card title="get_resource(*segments)" icon="folder-open">
+    Resolves an asset path from your `resources/` directory. Returns an absolute string path safe for Kivy `source=` properties.
+  </Card>
+  <Card title="platform" icon="mobile">
+    `PlatformType` enum. Check `.value` for the platform string: `"android"`, `"ios"`, `"windows"`, `"macos"`, or `"linux"`.
+  </Card>
+  <Card title="execution_mode" icon="box">
+    `ExecutionMode` enum. Distinguishes `SOURCE` (development) from `FROZEN_PYINSTALLER` (packaged release).
+  </Card>
+</CardGroup>
+
+<Tip>
+  Use `self.platform.value` to adapt your UI for Android or iOS at runtime. For example, increase touch target sizes or hide hover-only controls when running on a mobile platform.
+</Tip>

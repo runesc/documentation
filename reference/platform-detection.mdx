@@ -1,0 +1,188 @@
+---
+title: "Platform Detection in Qyro Engine"
+sidebarTitle: "Platform Detection"
+description: "Detect the host OS and execution environment at runtime using PlatformType, ExecutionMode, and PlatformDetector."
+---
+
+Qyro Engine automatically detects the operating system and execution environment when it starts up. You can query the results through properties on `ApplicationContext`, through the `PlatformDetector` utility class, or by inspecting the `PlatformType` and `ExecutionMode` enums directly. This lets you load the right assets, apply the correct UI conventions, and gate platform-specific features without writing `sys.platform` checks yourself.
+
+---
+
+## Importing the Platform API
+
+All platform-related symbols are exported from the top-level package:
+
+```python
+from qyro_engine import PlatformDetector, PlatformType, ExecutionMode
+```
+
+---
+
+## `PlatformType` Enum
+
+`PlatformType` inherits from both `str` and `Enum`, so each member is equal to its lowercase string value and can be used in string comparisons.
+
+| Member | Value | Detected when |
+|--------|-------|---------------|
+| `WINDOWS` | `"windows"` | `sys.platform` starts with `"win"` |
+| `MACOS` | `"macos"` | `sys.platform == "darwin"` |
+| `LINUX` | `"linux"` | `sys.platform` starts with `"linux"` |
+| `ANDROID` | `"android"` | `"android"` is in `sys.platform` |
+| `IOS` | `"ios"` | Reserved for future detection |
+| `UNKNOWN` | `"unknown"` | No match found |
+
+### `is_desktop` and `is_mobile` Properties
+
+`PlatformType` exposes two convenience boolean properties that group the members by device class.
+
+```python
+from qyro_engine import PlatformType
+
+pt = PlatformType.WINDOWS
+print(pt.is_desktop)   # True
+print(pt.is_mobile)    # False
+
+pt = PlatformType.ANDROID
+print(pt.is_desktop)   # False
+print(pt.is_mobile)    # True
+```
+
+`is_desktop` returns `True` for `WINDOWS`, `MACOS`, and `LINUX`.  
+`is_mobile` returns `True` for `ANDROID` and `IOS`.
+
+<Note>
+  On Android and iOS when running under Kivy, `self.platform.is_mobile` returns `True`. Use this to hide desktop-only widgets or enable touch-optimised input.
+</Note>
+
+---
+
+## `ExecutionMode` Enum
+
+`ExecutionMode` describes how the Python process was launched.
+
+| Member | Value | When |
+|--------|-------|------|
+| `SOURCE` | `"source"` | Running directly from `.py` source files |
+| `FROZEN_PYINSTALLER` | `"pyinstaller"` | Bundled as a standalone PyInstaller executable |
+| `FROZEN_GENERIC` | `"frozen_generic"` | Bundled with cx_Freeze, Briefcase, or similar |
+| `EMBEDDED` | `"embedded"` | Embedded inside another host process |
+
+---
+
+## `PlatformDetector` Class
+
+`PlatformDetector` is a stateless utility class you can call directly without constructing an `ApplicationContext`. All methods are static or class methods.
+
+```python
+from qyro_engine import PlatformDetector
+
+platform = PlatformDetector.get_platform()   # PlatformType
+
+if PlatformDetector.is_windows():
+    print("Running on Windows")
+elif PlatformDetector.is_mac():
+    print("Running on macOS")
+elif PlatformDetector.is_linux():
+    print("Running on Linux")
+```
+
+### Available Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_platform()` | `PlatformType` | Returns the detected platform enum member. |
+| `is_windows()` | `bool` | `True` on Windows. |
+| `is_mac()` | `bool` | `True` on macOS. |
+| `is_linux()` | `bool` | `True` on Linux. |
+| `is_ubuntu()` | `bool` | `True` when the Linux distro ID is `"ubuntu"`. |
+| `is_fedora()` | `bool` | `True` when the Linux distro ID is `"fedora"`. |
+| `is_arch()` | `bool` | `True` when the Linux distro ID is `"arch"` or `"manjaro"`. |
+| `is_gnome()` | `bool` | `True` when `XDG_CURRENT_DESKTOP` contains `"gnome"`. |
+| `is_kde()` | `bool` | `True` when `XDG_CURRENT_DESKTOP` contains `"kde"`. |
+
+---
+
+## Accessing Platform Info from `ApplicationContext`
+
+Once your `ApplicationContext` is constructed, the detected platform and execution mode are available as properties. You do not need to call `PlatformDetector` manually in most cases.
+
+```python
+class MainWindow(ApplicationContext, QMainWindow):
+    def __init__(self):
+        super().__init__(framework="PySide6")
+
+        print(self.platform)         # PlatformType.WINDOWS (example)
+        print(self.execution_mode)   # ExecutionMode.SOURCE (example)
+        print(self.is_frozen)        # False (example)
+```
+
+### `self.platform` — `PlatformType`
+
+Returns the host OS as a `PlatformType` member. Use it for platform-conditional logic anywhere inside your context subclass or component.
+
+### `self.execution_mode` — `ExecutionMode`
+
+Returns the granular execution environment. Useful for resolving paths differently in frozen vs. source builds, or for adjusting log verbosity.
+
+### `self.is_frozen` — `bool`
+
+Shorthand for `self.execution_mode in (ExecutionMode.FROZEN_PYINSTALLER, ExecutionMode.FROZEN_GENERIC)`. Use this as the quickest check when you only need to distinguish packaged from source.
+
+---
+
+## Practical Example: Platform-Conditional Resource Loading
+
+Load the correct icon format for each operating system:
+
+```python
+from qyro_engine import PlatformType
+
+def load_app_icon(self) -> str:
+    if self.platform == PlatformType.WINDOWS:
+        icon = self.get_resource("icons", "Icon.ico")
+    elif self.platform == PlatformType.MACOS:
+        icon = self.get_resource("icons", "512.png")
+    else:
+        icon = self.get_resource("icons", "256.png")
+    return icon
+```
+
+<Tip>
+  You can skip this manual check entirely by setting the `icon` key in your `settings/base.json` and providing platform-specific overrides in `windows.json`, `mac.json`, and `linux.json`. The engine's automatic icon discovery handles the platform logic for you.
+</Tip>
+
+---
+
+## Platform-Conditional Feature Gating
+
+Use `is_desktop` / `is_mobile` to toggle features without listing individual platforms:
+
+```python
+def render(self):
+    layout = QVBoxLayout(self)
+    layout.addWidget(self.main_panel)
+
+    if self.platform.is_desktop:
+        layout.addWidget(self.menu_bar)
+        layout.addWidget(self.status_bar)
+
+    if self.platform.is_mobile:
+        layout.addWidget(self.touch_toolbar)
+```
+
+---
+
+## Frozen Executable Path Resolution
+
+Combine `is_frozen` with `execution_mode` to resolve paths correctly in packaged builds:
+
+```python
+from pathlib import Path
+from qyro_engine import ExecutionMode
+
+def get_log_dir(self) -> Path:
+    if self.execution_mode == ExecutionMode.FROZEN_PYINSTALLER:
+        # Logs sit next to the .exe, not in the temp extraction dir
+        return Path(sys.executable).parent / "logs"
+    return Path(__file__).parent.parent / "logs"
+```
